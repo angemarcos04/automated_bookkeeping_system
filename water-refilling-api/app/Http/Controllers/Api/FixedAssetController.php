@@ -1,0 +1,107 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\FixedAsset;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class FixedAssetController extends Controller
+{
+    public function index(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => FixedAsset::orderBy('name')->get(),
+        ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'asset_code' => [
+                'required',
+                'string',
+                'max:20',
+                'unique:fixed_assets,asset_code',
+            ],
+            'name' => ['required', 'string', 'max:150'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'acquisition_date' => ['nullable', 'date'],
+            'acquisition_cost' => ['required', 'numeric', 'min:0'],
+            'useful_life_years' => ['nullable', 'numeric', 'min:0'],
+            'salvage_value' => ['required', 'numeric', 'min:0'],
+            'location' => ['nullable', 'string', 'max:150'],
+            'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        $fixedAsset = FixedAsset::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fixed asset created successfully.',
+            'data' => $fixedAsset,
+        ], 201);
+    }
+
+    public function show(FixedAsset $fixedAsset): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $fixedAsset,
+        ]);
+    }
+
+    public function update(
+        Request $request,
+        FixedAsset $fixedAsset
+    ): JsonResponse {
+        $validated = $request->validate([
+            'asset_code' => [
+                'required',
+                'string',
+                'max:20',
+                'unique:fixed_assets,asset_code,' . $fixedAsset->id,
+            ],
+            'name' => ['required', 'string', 'max:150'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'acquisition_date' => ['nullable', 'date'],
+            'acquisition_cost' => ['required', 'numeric', 'min:0'],
+            'useful_life_years' => ['nullable', 'numeric', 'min:0'],
+            'salvage_value' => ['required', 'numeric', 'min:0'],
+            'location' => ['nullable', 'string', 'max:150'],
+            'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
+            'description' => ['nullable', 'string'],
+            'is_active' => ['sometimes', 'boolean'],
+        ]);
+
+        $fixedAsset->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fixed asset updated successfully.',
+            'data' => $fixedAsset->fresh(),
+        ]);
+    }
+
+    public function destroy(FixedAsset $fixedAsset): JsonResponse
+    {
+        if (!$fixedAsset->is_active) {
+            return response()->json([
+                'success' => true,
+                'message' => 'This fixed asset is already inactive.',
+            ]);
+        }
+
+        $fixedAsset->update([
+            'is_active' => false,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fixed asset deactivated successfully.',
+        ]);
+    }
+}
