@@ -10,10 +10,6 @@ Imports System.Threading.Tasks
 Public Class ChartOfAccountsForm
     Inherits Form
 
-    Private ReadOnly httpClient As New HttpClient With {
-        .Timeout = TimeSpan.FromSeconds(30)
-    }
-
     Private accountsGrid As DataGridView
     Private statusLabel As Label
     Private txtCode As TextBox
@@ -33,7 +29,7 @@ Public Class ChartOfAccountsForm
     Private isBusy As Boolean = False
     Private isLoading As Boolean = False
 
-    Private Const ApiUrl As String = "http://127.0.0.1:8000/api/accounts"
+    Private Const ApiUrl As String = "accounts"
 
     Public Sub New()
         InitializeComponent()
@@ -267,82 +263,80 @@ Public Class ChartOfAccountsForm
         Await LoadAccountsAsync()
     End Sub
 
+    Private Async Function LoadAccountsAsync() As Task
+        If isLoading OrElse isBusy Then Return
 
-Private Async Function LoadAccountsAsync() As Task
-    If isLoading OrElse isBusy Then Return
+        isLoading = True
+        refreshButton.Enabled = False
+        statusLabel.Text = "Loading accounts..."
 
-    isLoading = True
-    refreshButton.Enabled = False
-    statusLabel.Text = "Loading accounts..."
+        Try
+            ApiSession.ApplyAuthorization()
 
-    Try
-        ApiSession.ApplyAuthorization()
+            Using response As HttpResponseMessage =
+                Await ApiSession.Client.GetAsync(ApiUrl)
 
-        Using response As HttpResponseMessage =
-            Await ApiSession.Client.GetAsync("accounts")
+                Dim json As String =
+                    Await response.Content.ReadAsStringAsync()
 
-            Dim json As String =
-                Await response.Content.ReadAsStringAsync()
+                If Not response.IsSuccessStatusCode Then
+                    Throw New Exception(
+                        "The API returned HTTP " &
+                        CInt(response.StatusCode).ToString() & "." &
+                        Environment.NewLine & json)
+                End If
 
-            If Not response.IsSuccessStatusCode Then
-                Throw New Exception(
-                    "The API returned HTTP " &
-                    CInt(response.StatusCode).ToString() & "." &
-                    Environment.NewLine & json)
-            End If
+                Dim options As New JsonSerializerOptions With {
+                    .PropertyNameCaseInsensitive = True
+                }
 
-            Dim options As New JsonSerializerOptions With {
-                .PropertyNameCaseInsensitive = True
-            }
+                Dim result As AccountsResponse =
+                    JsonSerializer.Deserialize(Of AccountsResponse)(
+                        json, options)
 
-            Dim result As AccountsResponse =
-                JsonSerializer.Deserialize(Of AccountsResponse)(
-                    json, options)
+                If result IsNot Nothing AndAlso result.data IsNot Nothing Then
+                    accountsGrid.DataSource = Nothing
+                    accountsGrid.DataSource = result.data
 
-            If result IsNot Nothing AndAlso result.data IsNot Nothing Then
-                accountsGrid.DataSource = Nothing
-                accountsGrid.DataSource = result.data
+                    For Each row As DataGridViewRow In accountsGrid.Rows
+                        Dim account As AccountItem =
+                            TryCast(row.DataBoundItem, AccountItem)
 
-                For Each row As DataGridViewRow In accountsGrid.Rows
-                    Dim account As AccountItem =
-                        TryCast(row.DataBoundItem, AccountItem)
+                        If account IsNot Nothing AndAlso Not account.is_active Then
+                            row.DefaultCellStyle.ForeColor = Color.Gray
+                        End If
+                    Next
 
-                    If account IsNot Nothing AndAlso Not account.is_active Then
-                        row.DefaultCellStyle.ForeColor = Color.Gray
-                    End If
-                Next
+                    statusLabel.Text =
+                        result.data.Count.ToString() & " account(s) loaded."
+                Else
+                    accountsGrid.DataSource = Nothing
+                    statusLabel.Text = "The API returned no account data."
+                End If
+            End Using
 
-                statusLabel.Text =
-                    result.data.Count.ToString() & " account(s) loaded."
-            Else
-                accountsGrid.DataSource = Nothing
-                statusLabel.Text = "The API returned no account data."
-            End If
-        End Using
+        Catch ex As Exception
+            statusLabel.Text = "Unable to load accounts."
 
-    Catch ex As Exception
-        statusLabel.Text = "Unable to load accounts."
-
-        MessageBox.Show(
-            "Unable to load the chart of accounts." &
-            Environment.NewLine & Environment.NewLine &
-            ex.Message & Environment.NewLine & Environment.NewLine &
-            "Check that the Laravel API is running at " &
-            "http://127.0.0.1:8000.",
-            "Aqua ARC - API Error",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Error)
-    Finally
-        isLoading = False
-        refreshButton.Enabled = True
-        UpdateSelectionButtons()
-    End Try
-End Function
+            MessageBox.Show(
+                "Unable to load the chart of accounts." &
+                Environment.NewLine & Environment.NewLine &
+                ex.Message & Environment.NewLine & Environment.NewLine &
+                "Check that the Laravel API is running at " &
+                "http://127.0.0.1:8000.",
+                "Aqua ARC - API Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error)
+        Finally
+            isLoading = False
+            refreshButton.Enabled = True
+            UpdateSelectionButtons()
+        End Try
+    End Function
 
     Private Sub AccountsGrid_SelectionChanged(sender As Object, e As EventArgs)
         If accountsGrid.CurrentRow Is Nothing OrElse
            accountsGrid.CurrentRow.DataBoundItem Is Nothing Then
-
             Return
         End If
 
@@ -365,31 +359,23 @@ End Function
     End Sub
 
     Private Async Sub CreateButton_Click(sender As Object, e As EventArgs)
-    If Not ValidateForm() Then Return
+        If Not ValidateForm() Then Return
 
-    Dim accountCode As String = txtCode.Text.Trim()
-    Dim accountName As String = txtName.Text.Trim()
-    Dim accountType As String = cboType.Text
-    Dim accountGroup As String = NullIfBlank(txtGroup.Text)
-    Dim accountDescription As String = NullIfBlank(txtDescription.Text)
-    Dim accountIsActive As Boolean = chkActive.Checked
+        Dim payload = New With {
+            .account_code = txtCode.Text.Trim(),
+            .account_name = txtName.Text.Trim(),
+            .account_type = cboType.Text,
+            .account_group = NullIfBlank(txtGroup.Text),
+            .description = NullIfBlank(txtDescription.Text),
+            .is_active = chkActive.Checked
+        }
 
-    Dim payload = New With {
-        .account_code = accountCode,
-        .account_name = accountName,
-        .account_type = accountType,
-        .account_group = accountGroup,
-        .description = accountDescription,
-        .is_active = accountIsActive
-    }
-
-    Await SendAccountRequestAsync(
-        HttpMethod.Post,
-        ApiUrl,
-        payload,
-        "Account created successfully.")
-End Sub
-
+        Await SendAccountRequestAsync(
+            HttpMethod.Post,
+            ApiUrl,
+            payload,
+            "Account created successfully.")
+    End Sub
 
     Private Async Sub UpdateButton_Click(sender As Object, e As EventArgs)
         If selectedAccountId <= 0 Then
@@ -483,25 +469,24 @@ End Sub
 
             Dim json As String = JsonSerializer.Serialize(payload)
 
-            Using content As New StringContent(
-                json, Encoding.UTF8, "application/json")
+            ApiSession.ApplyAuthorization()
 
-                Using request As New HttpRequestMessage(method, url)
-                    request.Content = content
+            Using request As New HttpRequestMessage(method, url)
+                request.Content = New StringContent(
+                    json, Encoding.UTF8, "application/json")
 
-                    Using response As HttpResponseMessage =
-                        Await httpClient.SendAsync(request)
+                Using response As HttpResponseMessage =
+                    Await ApiSession.Client.SendAsync(request)
 
-                        Dim responseText As String =
-                            Await response.Content.ReadAsStringAsync()
+                    Dim responseText As String =
+                        Await response.Content.ReadAsStringAsync()
 
-                        If Not response.IsSuccessStatusCode Then
-                            Throw New Exception(
-                                "Request failed with HTTP " &
-                                CInt(response.StatusCode).ToString() & "." &
-                                Environment.NewLine & responseText)
-                        End If
-                    End Using
+                    If Not response.IsSuccessStatusCode Then
+                        Throw New Exception(
+                            "Request failed with HTTP " &
+                            CInt(response.StatusCode).ToString() & "." &
+                            Environment.NewLine & responseText)
+                    End If
                 End Using
             End Using
 
@@ -618,11 +603,6 @@ End Sub
             "Check Account Information",
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning)
-    End Sub
-
-    Protected Overrides Sub OnFormClosed(e As FormClosedEventArgs)
-        httpClient.Dispose()
-        MyBase.OnFormClosed(e)
     End Sub
 
 End Class

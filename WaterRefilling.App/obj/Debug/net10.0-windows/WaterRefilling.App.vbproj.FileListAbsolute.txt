@@ -12,3 +12,4 @@ C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\obj\Debug\net
 C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\obj\Debug\net10.0-windows\WaterRefilling.App.pdb
 C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\obj\Debug\net10.0-windows\WaterRefilling.App.genruntimeconfig.cache
 C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\obj\Debug\net10.0-windows\ref\WaterRefilling.App.dll
+C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\obj\Debug\net10.0-windows\WaterRefilling.App.sourcelink.json
