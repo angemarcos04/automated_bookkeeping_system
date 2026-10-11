@@ -20,9 +20,20 @@ class LapsingScheduleController extends Controller
             $request->query('as_of', now()->toDateString())
         )->startOfDay();
 
+
         $assets = FixedAsset::where('is_active', true)
-            ->orderBy('asset_code')
-            ->get()
+            ->where(function ($query) use ($asOf) {
+        $query->whereNull('acquisition_date')
+            ->orWhereDate(
+                'acquisition_date',
+                '<=',
+                $asOf->toDateString()
+            );
+    })
+    ->orderBy('asset_code')
+    ->get()
+
+
             ->map(function (FixedAsset $asset) use ($asOf) {
                 $cost = (float) $asset->acquisition_cost;
                 $salvage = (float) $asset->salvage_value;

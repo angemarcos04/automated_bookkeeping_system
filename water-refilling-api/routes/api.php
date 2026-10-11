@@ -74,7 +74,9 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/dashboard', [DashboardController::class, 'index']);
+
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware('permission:dashboard.view');
 
     /*
     |--------------------------------------------------------------------------
@@ -82,11 +84,21 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/customers', [CustomerController::class, 'index']);
-    Route::post('/customers', [CustomerController::class, 'store']);
-    Route::get('/customers/{customer}', [CustomerController::class, 'show']);
-    Route::put('/customers/{customer}', [CustomerController::class, 'update']);
-    Route::delete('/customers/{customer}', [CustomerController::class, 'destroy']);
+Route::get('/customers', [CustomerController::class, 'index'])
+    ->middleware('permission:customers.view');
+
+Route::post('/customers', [CustomerController::class, 'store'])
+    ->middleware('permission:customers.create');
+
+Route::get('/customers/{customer}', [CustomerController::class, 'show'])
+    ->middleware('permission:customers.view');
+
+Route::put('/customers/{customer}', [CustomerController::class, 'update'])
+    ->middleware('permission:customers.edit');
+
+Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])
+    ->middleware('permission:customers.delete');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -94,11 +106,20 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/vendors', [VendorController::class, 'index']);
-    Route::post('/vendors', [VendorController::class, 'store']);
-    Route::get('/vendors/{vendor}', [VendorController::class, 'show']);
-    Route::put('/vendors/{vendor}', [VendorController::class, 'update']);
-    Route::delete('/vendors/{vendor}', [VendorController::class, 'destroy']);
+Route::get('/vendors', [VendorController::class, 'index'])
+    ->middleware('permission:vendors.view');
+
+Route::post('/vendors', [VendorController::class, 'store'])
+    ->middleware('permission:vendors.create');
+
+Route::get('/vendors/{vendor}', [VendorController::class, 'show'])
+    ->middleware('permission:vendors.view');
+
+Route::put('/vendors/{vendor}', [VendorController::class, 'update'])
+    ->middleware('permission:vendors.edit');
+
+Route::delete('/vendors/{vendor}', [VendorController::class, 'destroy'])
+    ->middleware('permission:vendors.delete');
 
     /*
     |--------------------------------------------------------------------------
@@ -106,11 +127,22 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/employees', [EmployeeController::class, 'index']);
-    Route::post('/employees', [EmployeeController::class, 'store']);
-    Route::get('/employees/{employee}', [EmployeeController::class, 'show']);
-    Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
-    Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy']);
+
+Route::get('/employees', [EmployeeController::class, 'index'])
+    ->middleware('permission:employees.view');
+
+Route::post('/employees', [EmployeeController::class, 'store'])
+    ->middleware('permission:employees.create');
+
+Route::get('/employees/{employee}', [EmployeeController::class, 'show'])
+    ->middleware('permission:employees.view');
+
+Route::put('/employees/{employee}', [EmployeeController::class, 'update'])
+    ->middleware('permission:employees.edit');
+
+Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])
+    ->middleware('permission:employees.delete');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -118,11 +150,22 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/departments', [DepartmentController::class, 'index']);
-    Route::post('/departments', [DepartmentController::class, 'store']);
-    Route::get('/departments/{department}', [DepartmentController::class, 'show']);
-    Route::put('/departments/{department}', [DepartmentController::class, 'update']);
-    Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
+
+Route::get('/departments', [DepartmentController::class, 'index'])
+    ->middleware('permission:departments.view');
+
+Route::post('/departments', [DepartmentController::class, 'store'])
+    ->middleware('permission:departments.create');
+
+Route::get('/departments/{department}', [DepartmentController::class, 'show'])
+    ->middleware('permission:departments.view');
+
+Route::put('/departments/{department}', [DepartmentController::class, 'update'])
+    ->middleware('permission:departments.edit');
+
+Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
+    ->middleware('permission:departments.delete');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -130,11 +173,21 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/funds', [FundController::class, 'index']);
-    Route::post('/funds', [FundController::class, 'store']);
-    Route::get('/funds/{fund}', [FundController::class, 'show']);
-    Route::put('/funds/{fund}', [FundController::class, 'update']);
-    Route::delete('/funds/{fund}', [FundController::class, 'destroy']);
+Route::get('/funds', [FundController::class, 'index'])
+    ->middleware('permission:funds.view');
+
+Route::post('/funds', [FundController::class, 'store'])
+    ->middleware('permission:funds.create');
+
+Route::get('/funds/{fund}', [FundController::class, 'show'])
+    ->middleware('permission:funds.view');
+
+Route::put('/funds/{fund}', [FundController::class, 'update'])
+    ->middleware('permission:funds.edit');
+
+Route::delete('/funds/{fund}', [FundController::class, 'destroy'])
+    ->middleware('permission:funds.delete');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -142,11 +195,20 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/fixed-assets', [FixedAssetController::class, 'index']);
-    Route::post('/fixed-assets', [FixedAssetController::class, 'store']);
-    Route::get('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'show']);
-    Route::put('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'update']);
-    Route::delete('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'destroy']);
+Route::get('/fixed-assets', [FixedAssetController::class, 'index'])
+    ->middleware('permission:fixed_assets.view');
+
+Route::post('/fixed-assets', [FixedAssetController::class, 'store'])
+    ->middleware('permission:fixed_assets.create');
+
+Route::get('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'show'])
+    ->middleware('permission:fixed_assets.view');
+
+Route::put('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'update'])
+    ->middleware('permission:fixed_assets.edit');
+
+Route::delete('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'destroy'])
+    ->middleware('permission:fixed_assets.delete');
 
     /*
     |--------------------------------------------------------------------------
@@ -154,86 +216,144 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/cash-receipts', [CashReceiptController::class, 'index']);
-    Route::post('/cash-receipts', [CashReceiptController::class, 'store']);
 
-    // Post a Draft cash receipt.
-    Route::post(
-        '/cash-receipts/{cashReceipt}/post',
-        [CashReceiptController::class, 'post']
-    );
+Route::get('/cash-receipts', [CashReceiptController::class, 'index'])
+    ->middleware('permission:cash_receipts.view');
 
-    Route::get('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'show']);
-    Route::put('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'update']);
-    Route::delete('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'destroy']);
+Route::post('/cash-receipts', [CashReceiptController::class, 'store'])
+    ->middleware('permission:cash_receipts.create');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cash Disbursements Book
-    |--------------------------------------------------------------------------
-    */
+// Posting a draft receipt requires a separate permission.
+Route::post(
+    '/cash-receipts/{cashReceipt}/post',
+    [CashReceiptController::class, 'post']
+)->middleware('permission:cash_receipts.post');
 
-    Route::get('/cash-disbursements', [CashDisbursementController::class, 'index']);
-    Route::post('/cash-disbursements', [CashDisbursementController::class, 'store']);
-    Route::get('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'show']);
-    Route::put('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'update']);
-    Route::delete('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'destroy']);
+Route::get('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'show'])
+    ->middleware('permission:cash_receipts.view');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Request for Payment (RFP)
-    |--------------------------------------------------------------------------
-    */
+Route::put('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'update'])
+    ->middleware('permission:cash_receipts.edit');
 
-    Route::get('/rfps', [RfpController::class, 'index']);
-    Route::post('/rfps', [RfpController::class, 'store']);
-    Route::get('/rfps/{rfp}', [RfpController::class, 'show']);
-    Route::put('/rfps/{rfp}', [RfpController::class, 'update']);
-    Route::delete('/rfps/{rfp}', [RfpController::class, 'destroy']);
+Route::delete('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'destroy'])
+    ->middleware('permission:cash_receipts.delete');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Invoices
-    |--------------------------------------------------------------------------
-    */
+/*
+|--------------------------------------------------------------------------
+| Cash Disbursements Book
+|--------------------------------------------------------------------------
+*/
 
-    Route::get('/invoices', [InvoiceController::class, 'index']);
-    Route::post('/invoices', [InvoiceController::class, 'store']);
-    Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
-    Route::put('/invoices/{invoice}', [InvoiceController::class, 'update']);
-    Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
+Route::get('/cash-disbursements', [CashDisbursementController::class, 'index'])
+    ->middleware('permission:cash_disbursements.view');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cash/Check Vouchers
-    |--------------------------------------------------------------------------
-    */
+Route::post('/cash-disbursements', [CashDisbursementController::class, 'store'])
+    ->middleware('permission:cash_disbursements.create');
 
-    Route::get('/cash-check-vouchers', [CashCheckVoucherController::class, 'index']);
-    Route::post('/cash-check-vouchers', [CashCheckVoucherController::class, 'store']);
-    Route::get('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'show']);
-    Route::put('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'update']);
-    Route::delete('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'destroy']);
+Route::get('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'show'])
+    ->middleware('permission:cash_disbursements.view');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Journal Entries
-    |--------------------------------------------------------------------------
-    */
+Route::put('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'update'])
+    ->middleware('permission:cash_disbursements.edit');
 
-    Route::get('/journal-entries', [JournalEntryController::class, 'index']);
-    Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show']);
-    Route::post('/journal-entries', [JournalEntryController::class, 'store']);
-    Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post']);
+Route::delete('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'destroy'])
+    ->middleware('permission:cash_disbursements.delete');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Accounting Reports
-    |--------------------------------------------------------------------------
-    */
 
-    Route::get('/general-ledger', [GeneralLedgerController::class, 'index']);
-    Route::get('/trial-balance', [TrialBalanceController::class, 'index']);
+/*
+|--------------------------------------------------------------------------
+| Request for Payment (RFP)
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/rfps', [RfpController::class, 'index'])
+    ->middleware('permission:rfp.view');
+
+Route::post('/rfps', [RfpController::class, 'store'])
+    ->middleware('permission:rfp.create');
+
+Route::get('/rfps/{rfp}', [RfpController::class, 'show'])
+    ->middleware('permission:rfp.view');
+
+Route::put('/rfps/{rfp}', [RfpController::class, 'update'])
+    ->middleware('permission:rfp.edit');
+
+Route::delete('/rfps/{rfp}', [RfpController::class, 'destroy'])
+    ->middleware('permission:rfp.delete');
+
+
+/*
+|--------------------------------------------------------------------------
+| Invoices
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/invoices', [InvoiceController::class, 'index'])
+    ->middleware('permission:invoices.view');
+
+Route::post('/invoices', [InvoiceController::class, 'store'])
+    ->middleware('permission:invoices.create');
+
+Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])
+    ->middleware('permission:invoices.view');
+
+Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])
+    ->middleware('permission:invoices.edit');
+
+Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy'])
+    ->middleware('permission:invoices.delete');
+
+
+/*
+|--------------------------------------------------------------------------
+| Cash/Check Vouchers
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/cash-check-vouchers', [CashCheckVoucherController::class, 'index'])
+    ->middleware('permission:vouchers.view');
+
+Route::post('/cash-check-vouchers', [CashCheckVoucherController::class, 'store'])
+    ->middleware('permission:vouchers.create');
+
+Route::get('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'show'])
+    ->middleware('permission:vouchers.view');
+
+Route::put('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'update'])
+    ->middleware('permission:vouchers.edit');
+
+Route::delete('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'destroy'])
+    ->middleware('permission:vouchers.delete');
+
+/*
+|--------------------------------------------------------------------------
+| Journal Entries
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/journal-entries', [JournalEntryController::class, 'index'])
+    ->middleware('permission:journal.view');
+
+Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])
+    ->middleware('permission:journal.view');
+
+Route::post('/journal-entries', [JournalEntryController::class, 'store'])
+    ->middleware('permission:journal_vouchers.create');
+
+Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
+    ->middleware('permission:journal_vouchers.post');
+
+/*
+|--------------------------------------------------------------------------
+| Accounting Reports
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/general-ledger', [GeneralLedgerController::class, 'index'])
+    ->middleware('permission:ledger.view');
+
+Route::get('/trial-balance', [TrialBalanceController::class, 'index'])
+    ->middleware('permission:trial_balance.view');
 
     /*
     |--------------------------------------------------------------------------
@@ -265,5 +385,6 @@ Route::delete('/accounts/{account}', [AccountController::class, 'destroy'])
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/reports/lapsing-schedule', [LapsingScheduleController::class, 'index']);
+    Route::get('/reports/lapsing-schedule', [LapsingScheduleController::class, 'index'])
+    ->middleware('permission:financial_reports.view');
 });

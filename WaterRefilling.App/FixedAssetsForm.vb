@@ -795,23 +795,29 @@ Public Class FixedAssetsForm
                         categoryInput.SelectedIndex = -1
                     End If
 
-                    Dim acquisitionDate As String =
-                        JsonText(asset, "acquisition_date")
+Dim acquisitionDate As String =
+    JsonText(asset, "acquisition_date").Trim()
 
-                    Dim parsedDate As DateTime
+Dim parsedDate As DateTime
+Dim dateParsed As Boolean = False
 
-                    If DateTime.TryParse(
-                        acquisitionDate,
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.None,
-                        parsedDate) Then
+If acquisitionDate.Length >= 10 Then
+    dateParsed = DateTime.TryParseExact(
+        acquisitionDate.Substring(0, 10),
+        "yyyy-MM-dd",
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.None,
+        parsedDate)
+End If
 
-                        acquisitionDateInput.Value = parsedDate
-                        acquisitionDateInput.Checked = True
-                    Else
-                        acquisitionDateInput.Value = DateTime.Today
-                        acquisitionDateInput.Checked = False
-                    End If
+If dateParsed Then
+    acquisitionDateInput.Value = parsedDate.Date
+    acquisitionDateInput.Checked = True
+Else
+    acquisitionDateInput.Value = DateTime.Today
+    acquisitionDateInput.Checked = False
+End If
+
 
                     acquisitionCostInput.Text =
                         JsonDecimal(asset, "acquisition_cost").ToString(

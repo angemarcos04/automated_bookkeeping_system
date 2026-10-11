@@ -18,6 +18,9 @@ Public Class MainForm
     Private workspace As Panel
     Private pageTitle As Label
 
+    ' Keep references to dashboard values so the API can update them.
+    Private ReadOnly summaryValues As New Dictionary(Of String, Label)()
+
     Public Sub New()
         InitializeDashboard()
     End Sub
@@ -33,6 +36,10 @@ Public Class MainForm
         BuildSidebar()
         BuildHeader()
         BuildDashboard()
+
+        AddHandler Me.Shown, Async Sub(sender, e)
+                                 Await LoadDashboardAsync()
+                             End Sub
     End Sub
 
     Private Sub BuildSidebar()
@@ -81,18 +88,18 @@ Public Class MainForm
         sidebar.Controls.Add(subtitle)
 
         Dim menuItems As String() = {
-        "Dashboard",
-        "Authentication & Security",
-        "System Setup",
-        "Master Data",
-        "Fixed Assets",
-        "Transactions",
-        "Journal Entries",
-        "General Ledger",
-        "Financial Reports",
-        "Audit Trail",
-        "Settings"
-}
+            "Dashboard",
+            "Authentication & Security",
+            "System Setup",
+            "Master Data",
+            "Fixed Assets",
+            "Transactions",
+            "Journal Entries",
+            "General Ledger",
+            "Financial Reports",
+            "Audit Trail",
+            "Settings"
+        }
 
         Dim y As Integer = 112
 
@@ -201,6 +208,7 @@ Public Class MainForm
 
     Private Sub BuildDashboardContent()
         workspace.Controls.Clear()
+        summaryValues.Clear()
 
         Dim welcome As New Label With {
             .Text = "Welcome to Aqua ARC!",
@@ -221,7 +229,8 @@ Public Class MainForm
         workspace.Controls.Add(description)
 
         Dim notice As New Label With {
-            .Text = "Financial information will be displayed here.",
+            .Text = "Connecting to financial data...",
+            .Name = "dashboardNotice",
             .Font = New Font("Segoe UI", 9, FontStyle.Bold),
             .ForeColor = deepGreen,
             .BackColor = Color.FromArgb(228, 245, 232),
@@ -232,22 +241,22 @@ Public Class MainForm
         MakeRounded(notice, 8)
         workspace.Controls.Add(notice)
 
-        AddSummaryPanel("CASH BALANCE", "Not connected",
+        AddSummaryPanel("CASH BALANCE", "Loading...",
                         "Available cash", 25, 155, 360, 140, True)
 
-        AddSummaryPanel("TOTAL INCOME", "Not connected",
+        AddSummaryPanel("TOTAL INCOME", "Loading...",
                         "Recorded income", 405, 155, 230, 140)
 
-        AddSummaryPanel("TOTAL EXPENSES", "Not connected",
+        AddSummaryPanel("TOTAL EXPENSES", "Loading...",
                         "Recorded expenses", 655, 155, 230, 140)
 
-        AddSummaryPanel("RECEIVABLES", "Not connected",
+        AddSummaryPanel("RECEIVABLES", "Loading...",
                         "Outstanding amounts", 905, 155, 210, 140)
 
-        AddSummaryPanel("PAYABLES", "Not connected",
+        AddSummaryPanel("PAYABLES", "Loading...",
                         "Amounts owed", 25, 315, 250, 125)
 
-        AddSummaryPanel("TOTAL ASSETS", "Not connected",
+        AddSummaryPanel("TOTAL ASSETS", "Loading...",
                         "Recorded assets", 295, 315, 250, 125)
 
         Dim activityTitle As New Label With {
@@ -294,7 +303,7 @@ Public Class MainForm
         activityGrid.ColumnHeadersDefaultCellStyle.ForeColor = deepGreen
         activityGrid.EnableHeadersVisualStyles = False
         activityGrid.Rows.Add("—", "—", "—",
-                              "No transaction data loaded", "—", "—")
+                              "Recent activity is not connected yet", "—", "—")
 
         workspace.Controls.Add(activityGrid)
     End Sub
@@ -344,6 +353,8 @@ Public Class MainForm
         }
         panel.Controls.Add(amount)
 
+        summaryValues(caption) = amount
+
         Dim subtext As New Label With {
             .Text = detail,
             .Location = New Point(18, height - 32),
@@ -352,6 +363,91 @@ Public Class MainForm
             .ForeColor = Color.Gray
         }
         panel.Controls.Add(subtext)
+    End Sub
+
+    Private Async Function LoadDashboardAsync() As Task
+        Try
+            ApiSession.ApplyAuthorization()
+
+            Using response As HttpResponseMessage =
+                Await ApiSession.Client.GetAsync("dashboard")
+
+                Dim json As String =
+                    Await response.Content.ReadAsStringAsync()
+
+                If Not response.IsSuccessStatusCode Then
+                    Throw New Exception(
+                        "Dashboard API returned HTTP " &
+                        CInt(response.StatusCode).ToString() &
+                        ": " & json)
+                End If
+
+                Using document As JsonDocument = JsonDocument.Parse(json)
+                    Dim root As JsonElement = document.RootElement
+                    Dim data As JsonElement
+
+                    If Not root.TryGetProperty("data", data) OrElse
+                       data.ValueKind <> JsonValueKind.Object Then
+                        Throw New Exception(
+                            "The dashboard response has no valid data object.")
+                    End If
+
+                    UpdateSummary("CASH BALANCE",
+                                  ReadJsonDecimal(data, "cash_balance"))
+
+                    UpdateSummary("TOTAL INCOME",
+                                  ReadJsonDecimal(data, "income"))
+
+                    UpdateSummary("TOTAL EXPENSES",
+                                  ReadJsonDecimal(data, "expenses"))
+
+                    UpdateSummary("RECEIVABLES",
+                                  ReadJsonDecimal(data, "receivables"))
+
+                    UpdateSummary("PAYABLES",
+                                  ReadJsonDecimal(data, "payables"))
+
+                    UpdateSummary("TOTAL ASSETS",
+                                  ReadJsonDecimal(data, "assets"))
+                End Using
+            End Using
+
+            SetDashboardNotice(
+                "Financial summary loaded successfully.")
+
+        Catch ex As Exception
+            For Each amount As Label In summaryValues.Values
+                amount.Text = "Unavailable"
+            Next
+
+            SetDashboardNotice(
+                "Unable to connect to financial data.")
+
+            MessageBox.Show(
+                "The dashboard could not load its financial summary." &
+                vbCrLf & vbCrLf & ex.Message &
+                vbCrLf & vbCrLf &
+                "Check that the Laravel API is running and that your account " &
+                "has permission to view the dashboard.",
+                "Dashboard Connection",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+        End Try
+    End Function
+
+    Private Sub UpdateSummary(caption As String, amount As Decimal)
+        If summaryValues.ContainsKey(caption) Then
+            summaryValues(caption).Text = FormatPeso(amount)
+        End If
+    End Sub
+
+    Private Sub SetDashboardNotice(message As String)
+        For Each control As Control In workspace.Controls
+            If control.Name = "dashboardNotice" Then
+                control.Text = message
+                Exit For
+            End If
+        Next
     End Sub
 
     Private Sub MakeRounded(control As Control, radius As Integer)
@@ -390,109 +486,111 @@ Public Class MainForm
         updateRegion()
     End Sub
 
+    Private Sub HandleNavigation(item As String)
+        Select Case item
+            Case "Dashboard"
+                pageTitle.Text = "Dashboard"
+                BuildDashboardContent()
+                AwaitDashboardRefresh()
 
+            Case "Master Data"
+                pageTitle.Text = "Chart of Accounts"
+                Using accounts As New ChartOfAccountsForm()
+                    accounts.ShowDialog(Me)
+                End Using
 
-Private Sub HandleNavigation(item As String)
-    Select Case item
-        Case "Dashboard"
-            pageTitle.Text = "Dashboard"
-            BuildDashboardContent()
+            Case "Transactions"
+                Dim choice As DialogResult = MessageBox.Show(
+                    "Yes = Cash Receipts Book" & vbCrLf &
+                    "No = Cash Disbursements",
+                    "Transactions",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question)
 
-        Case "Master Data"
-            pageTitle.Text = "Chart of Accounts"
-            Using accounts As New ChartOfAccountsForm()
-                accounts.ShowDialog(Me)
-            End Using
+                If choice = DialogResult.Yes Then
+                    pageTitle.Text = "Cash Receipts Book"
+                    Using receipts As New CashReceiptsForm()
+                        receipts.ShowDialog(Me)
+                    End Using
+                ElseIf choice = DialogResult.No Then
+                    pageTitle.Text = "Cash Disbursements"
+                    Using disbursements As New CashDisbursementsForm()
+                        disbursements.ShowDialog(Me)
+                    End Using
+                End If
 
-        Case "Transactions"
-            Dim choice As DialogResult = MessageBox.Show(
-                "Yes = Cash Receipts Book" & vbCrLf &
-                "No = Cash Disbursements",
+            Case "Journal Entries"
+                pageTitle.Text = "Journal Entries"
+                Using journal As New JournalEntriesForm()
+                    journal.ShowDialog(Me)
+                End Using
+
+            Case "Fixed Assets"
+                pageTitle.Text = "Fixed Assets"
+                Using assets As New FixedAssetsForm()
+                    assets.ShowDialog(Me)
+                End Using
+
+            Case "General Ledger"
+                pageTitle.Text = "General Ledger"
+                Using ledger As New GeneralLedgerForm()
+                    ledger.ShowDialog(Me)
+                End Using
+
+            Case "Financial Reports"
+                Dim choice As DialogResult = MessageBox.Show(
+                    "Yes = Lapsing Schedule" & vbCrLf &
+                    "No = Trial Balance",
+                    "Financial Reports",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question)
+
+                If choice = DialogResult.Yes Then
+                    pageTitle.Text = "Lapsing Schedule"
+                    ShowLapsingSchedule()
+                ElseIf choice = DialogResult.No Then
+                    pageTitle.Text = "Trial Balance"
+                    Using trialBalance As New TrialBalanceForm()
+                        trialBalance.ShowDialog(Me)
+                    End Using
+                End If
+
+            Case Else
+                MessageBox.Show(
+                    item & " is not connected yet.",
+                    "Navigation",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information)
+        End Select
+    End Sub
+
+    Private Async Sub AwaitDashboardRefresh()
+        Await LoadDashboardAsync()
+    End Sub
+
+    Private Sub ShowTransactionsMenu()
+        Dim choice As DialogResult =
+            MessageBox.Show(
+                "Choose Yes for Cash Receipts or No for Cash Disbursements.",
                 "Transactions",
                 MessageBoxButtons.YesNoCancel,
                 MessageBoxIcon.Question)
 
-            If choice = DialogResult.Yes Then
-                pageTitle.Text = "Cash Receipts Book"
-                Using receipts As New CashReceiptsForm()
-                    receipts.ShowDialog(Me)
-                End Using
-            ElseIf choice = DialogResult.No Then
-                pageTitle.Text = "Cash Disbursements"
-                Using disbursements As New CashDisbursementsForm()
-                    disbursements.ShowDialog(Me)
-                End Using
-            End If
+        If choice = DialogResult.Yes Then
+            pageTitle.Text = "Cash Receipts Book"
 
-        Case "Journal Entries"
-            pageTitle.Text = "Journal Entries"
-            Using journal As New JournalEntriesForm()
-                journal.ShowDialog(Me)
+            Using receipts As New CashReceiptsForm()
+                receipts.ShowDialog(Me)
             End Using
 
-        Case "Fixed Assets"
-            pageTitle.Text = "Fixed Assets"
-            Using assets As New FixedAssetsForm()
-                assets.ShowDialog(Me)
+        ElseIf choice = DialogResult.No Then
+            pageTitle.Text = "Cash Disbursements"
+
+            Using disbursements As New CashDisbursementsForm()
+                disbursements.ShowDialog(Me)
             End Using
-
-        Case "General Ledger"
-            pageTitle.Text = "General Ledger"
-            Using ledger As New GeneralLedgerForm()
-                ledger.ShowDialog(Me)
-            End Using
-
-        Case "Financial Reports"
-            Dim choice As DialogResult = MessageBox.Show(
-                "Yes = Lapsing Schedule" & vbCrLf &
-                "No = Trial Balance",
-                "Financial Reports",
-                MessageBoxButtons.YesNoCancel,
-                MessageBoxIcon.Question)
-
-            If choice = DialogResult.Yes Then
-                pageTitle.Text = "Lapsing Schedule"
-                ShowLapsingSchedule()
-            ElseIf choice = DialogResult.No Then
-                pageTitle.Text = "Trial Balance"
-                Using trialBalance As New TrialBalanceForm()
-                    trialBalance.ShowDialog(Me)
-                End Using
-            End If
-
-        Case Else
-            MessageBox.Show(
-                item & " is not connected yet.",
-                "Navigation",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information)
-    End Select
-End Sub
-
-Private Sub ShowTransactionsMenu()
-    Dim choice As DialogResult =
-        MessageBox.Show(
-            "Choose Yes for Cash Receipts or No for Cash Disbursements.",
-            "Transactions",
-            MessageBoxButtons.YesNoCancel,
-            MessageBoxIcon.Question)
-
-    If choice = DialogResult.Yes Then
-        pageTitle.Text = "Cash Receipts Book"
-
-        Using receipts As New CashReceiptsForm()
-            receipts.ShowDialog(Me)
-        End Using
-
-    ElseIf choice = DialogResult.No Then
-        pageTitle.Text = "Cash Disbursements"
-
-        Using disbursements As New CashDisbursementsForm()
-            disbursements.ShowDialog(Me)
-        End Using
-    End If
-End Sub
-
+        End If
+    End Sub
 
     Private Async Sub ShowLapsingSchedule()
         workspace.Controls.Clear()
@@ -603,7 +701,9 @@ End Sub
 
         Dim loadReport As Func(Of Task) =
             Async Function()
-                Dim period As String = periodPicker.SelectedItem.ToString()
+                Dim period As String =
+                    periodPicker.SelectedItem.ToString()
+
                 Dim referenceDate As DateTime = datePicker.Value.Date
 
                 Dim range As (StartDate As DateTime, EndDate As DateTime) =
@@ -627,7 +727,8 @@ End Sub
             Sub(sender, e)
                 If periodPicker.SelectedItem IsNot Nothing Then
                     statusLabel.Text =
-                        "Selected period: " & periodPicker.SelectedItem.ToString() &
+                        "Selected period: " &
+                        periodPicker.SelectedItem.ToString() &
                         ". Click Load Report to refresh."
                 End If
             End Sub
@@ -677,10 +778,11 @@ End Sub
         reportGrid.Rows.Clear()
 
         Try
-   Dim url As String =
-    "reports/lapsing-schedule?period=" &
-    Uri.EscapeDataString(period.ToLowerInvariant()) &
-    "&date=" & endDate.ToString("yyyy-MM-dd")
+            Dim url As String =
+            "reports/lapsing-schedule?as_of=" &
+            endDate.ToString("yyyy-MM-dd",
+                CultureInfo.InvariantCulture)
+
 
             Dim totalCost As Decimal = 0D
             Dim totalAnnual As Decimal = 0D
@@ -688,63 +790,59 @@ End Sub
             Dim totalNetBookValue As Decimal = 0D
             Dim assetCount As Integer = 0
 
-           
-ApiSession.ApplyAuthorization()
+            ApiSession.ApplyAuthorization()
 
-Using response As HttpResponseMessage =
-    Await ApiSession.Client.GetAsync(url)
+            Using response As HttpResponseMessage =
+                Await ApiSession.Client.GetAsync(url)
 
-    Dim json As String =
-        Await response.Content.ReadAsStringAsync()
+                Dim json As String =
+                    Await response.Content.ReadAsStringAsync()
 
-    If Not response.IsSuccessStatusCode Then
-        Throw New Exception(
-            "API returned HTTP " &
-            CInt(response.StatusCode).ToString() &
-            ": " & json)
-    End If
+                If Not response.IsSuccessStatusCode Then
+                    Throw New Exception(
+                        "API returned HTTP " &
+                        CInt(response.StatusCode).ToString() &
+                        ": " & json)
+                End If
 
-    Using document As JsonDocument =
-        JsonDocument.Parse(json)
+                Using document As JsonDocument = JsonDocument.Parse(json)
+                    Dim root As JsonElement = document.RootElement
+                    Dim assets As JsonElement
 
-        Dim root As JsonElement = document.RootElement
-        Dim assets As JsonElement
+                    If Not root.TryGetProperty("data", assets) OrElse
+                       assets.ValueKind <> JsonValueKind.Array Then
+                        Throw New Exception(
+                            "The API response does not contain a valid data array.")
+                    End If
 
-        If Not root.TryGetProperty("data", assets) OrElse
-           assets.ValueKind <> JsonValueKind.Array Then
-            Throw New Exception(
-                "The API response does not contain a valid data array.")
-        End If
+                    For Each asset As JsonElement In assets.EnumerateArray()
+                        Dim cost As Decimal =
+                            ReadJsonDecimal(asset, "acquisition_cost")
+                        Dim annual As Decimal =
+                            ReadJsonDecimal(asset, "annual_depreciation")
+                        Dim accumulated As Decimal =
+                            ReadJsonDecimal(asset, "accumulated_depreciation")
+                        Dim netValue As Decimal =
+                            ReadJsonDecimal(asset, "net_book_value")
 
-        For Each asset As JsonElement In assets.EnumerateArray()
-            Dim cost As Decimal =
-                ReadJsonDecimal(asset, "acquisition_cost")
-            Dim annual As Decimal =
-                ReadJsonDecimal(asset, "annual_depreciation")
-            Dim accumulated As Decimal =
-                ReadJsonDecimal(asset, "accumulated_depreciation")
-            Dim netValue As Decimal =
-                ReadJsonDecimal(asset, "net_book_value")
+                        totalCost += cost
+                        totalAnnual += annual
+                        totalAccumulated += accumulated
+                        totalNetBookValue += netValue
+                        assetCount += 1
 
-            totalCost += cost
-            totalAnnual += annual
-            totalAccumulated += accumulated
-            totalNetBookValue += netValue
-            assetCount += 1
-
-            reportGrid.Rows.Add(
-                ReadJsonText(asset, "asset_code"),
-                ReadJsonText(asset, "name"),
-                ReadJsonText(asset, "category"),
-                ReadJsonText(asset, "acquisition_date"),
-                FormatPeso(cost),
-                FormatPeso(annual),
-                FormatPeso(accumulated),
-                FormatPeso(netValue))
-        Next
-    End Using
-End Using
-
+                        reportGrid.Rows.Add(
+                            ReadJsonText(asset, "asset_code"),
+                            ReadJsonText(asset, "name"),
+                            ReadJsonText(asset, "category"),
+                            ReadJsonText(asset, "acquisition_date"),
+                            FormatPeso(cost),
+                            FormatPeso(annual),
+                            FormatPeso(accumulated),
+                            FormatPeso(netValue))
+                    Next
+                End Using
+            End Using
 
             If assetCount > 0 Then
                 Dim totalRowIndex As Integer = reportGrid.Rows.Add(
