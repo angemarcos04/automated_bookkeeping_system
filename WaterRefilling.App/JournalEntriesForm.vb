@@ -1,17 +1,15 @@
 Imports System.Drawing
+Imports System.Linq
 Imports System.Net.Http
-Imports System.Net.Http.Headers
 Imports System.Text
 Imports System.Text.Json
 Imports System.Text.Json.Serialization
+Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
 Public Class JournalEntriesForm
     Inherits Form
 
-    Private Const ApiBaseUrl As String = "http://127.0.0.1:8000/api/"
-
-    Private ReadOnly apiClient As New HttpClient()
     Private ReadOnly jsonOptions As New JsonSerializerOptions With {
         .PropertyNameCaseInsensitive = True,
         .NumberHandling = JsonNumberHandling.AllowReadingFromString
@@ -25,13 +23,12 @@ Public Class JournalEntriesForm
     Private ReadOnly linesGrid As New DataGridView()
     Private ReadOnly detailsLabel As New Label()
 
-    Private isLoading As Boolean = False
-    Private isPosting As Boolean = False
-    Private selectedEntryId As Integer? = Nothing
+    Private isLoading As Boolean
+    Private isPosting As Boolean
+    Private selectedEntryId As Integer?
 
     Public Sub New()
         InitializeComponent()
-        ConfigureAuthorization()
         ConfigureEntriesGrid()
         ConfigureLinesGrid()
 
@@ -119,19 +116,6 @@ Public Class JournalEntriesForm
         button.Cursor = Cursors.Hand
     End Sub
 
-    Private Sub ConfigureAuthorization()
-        apiClient.BaseAddress = New Uri(ApiBaseUrl)
-
-        apiClient.DefaultRequestHeaders.Accept.Clear()
-        apiClient.DefaultRequestHeaders.Accept.Add(
-            New MediaTypeWithQualityHeaderValue("application/json"))
-
-        If Not String.IsNullOrWhiteSpace(ApiSession.BearerToken) Then
-            apiClient.DefaultRequestHeaders.Authorization =
-                New AuthenticationHeaderValue("Bearer", ApiSession.BearerToken)
-        End If
-    End Sub
-
     Private Sub ConfigureEntriesGrid()
         With entriesGrid
             .ReadOnly = True
@@ -198,8 +182,10 @@ Public Class JournalEntriesForm
         statusLabel.Text = "Loading journal entries..."
 
         Try
+            ApiSession.ApplyAuthorization()
+
             Using response As HttpResponseMessage =
-                Await apiClient.GetAsync("journal-entries")
+                Await ApiSession.Client.GetAsync("journal-entries")
 
                 Dim body As String =
                     Await response.Content.ReadAsStringAsync()
@@ -246,7 +232,7 @@ Public Class JournalEntriesForm
                         .Status = entry.Status,
                         .TotalDebit = totalDebit,
                         .TotalCredit = totalCredit,
-                        .Balanced = entryLines.Count > 0 AndAlso
+                        .Balanced = entryLines.Count >= 2 AndAlso
                             Math.Abs(totalDebit - totalCredit) < 0.005D
                     })
                 Next
@@ -258,6 +244,10 @@ Public Class JournalEntriesForm
                     entriesGrid.Columns("ID").Visible = False
                 End If
 
+                If entriesGrid.Columns.Contains("ReferenceID") Then
+                    entriesGrid.Columns("ReferenceID").Visible = False
+                End If
+
                 If entriesGrid.Columns.Contains("TotalDebit") Then
                     entriesGrid.Columns("TotalDebit").DefaultCellStyle.Format = "N2"
                 End If
@@ -267,23 +257,28 @@ Public Class JournalEntriesForm
                 End If
 
                 If rows.Count = 0 Then
-                    statusLabel.Text =
-                        "No journal entries were returned by the API."
+                    statusLabel.Text = "No journal entries were returned by the API."
                     linesGrid.DataSource = Nothing
                     selectedEntryId = Nothing
                 Else
+                    entriesGrid.ClearSelection()
+
+                    If entriesGrid.Columns.Contains("JournalNumber") Then
+                        entriesGrid.CurrentCell =
+                            entriesGrid.Rows(0).Cells("JournalNumber")
+                    End If
+
+                    entriesGrid.Rows(0).Selected = True
+
+                    Dim firstId As Integer = rows(0).ID
+                    selectedEntryId = firstId
+                    UpdatePostButtonState()
+
                     statusLabel.Text =
                         $"Loaded {rows.Count} journal entry record(s)."
 
-                    If entriesGrid.Rows.Count > 0 Then
-                        entriesGrid.ClearSelection()
-                        entriesGrid.Rows(0).Selected = True
-
-                        If entriesGrid.Columns.Contains("JournalNumber") Then
-                            entriesGrid.CurrentCell =
-                                entriesGrid.Rows(0).Cells("JournalNumber")
-                        End If
-                    End If
+                    ' Explicitly load the first row's details.
+                    Await LoadSelectedEntryLinesAsync(firstId)
                 End If
             End Using
 
@@ -325,6 +320,11 @@ Public Class JournalEntriesForm
 
         If Not Integer.TryParse(selectedValue.ToString(), entryId) Then Return
 
+        If selectedEntryId.HasValue AndAlso selectedEntryId.Value = entryId Then
+            UpdatePostButtonState()
+            Return
+        End If
+
         selectedEntryId = entryId
         UpdatePostButtonState()
 
@@ -344,11 +344,8 @@ Public Class JournalEntriesForm
             Return
         End If
 
-        Dim statusValue As Object =
-            entriesGrid.CurrentRow.Cells("Status").Value
-
         Dim entryStatus As String =
-            If(statusValue Is Nothing, "", statusValue.ToString())
+            Convert.ToString(entriesGrid.CurrentRow.Cells("Status").Value)
 
         postButton.Enabled =
             String.Equals(
@@ -392,23 +389,19 @@ Public Class JournalEntriesForm
         End If
 
         Dim entryId As Integer = selectedEntryId.Value
-        Dim journalNumber As String = ""
+        Dim journalNumber As String =
+            Convert.ToString(entriesGrid.CurrentRow.Cells("JournalNumber").Value)
 
-        If entriesGrid.Columns.Contains("JournalNumber") Then
-            journalNumber = Convert.ToString(
-                entriesGrid.CurrentRow.Cells("JournalNumber").Value)
-        End If
-
-        Dim confirmation As DialogResult = MessageBox.Show(
+        If MessageBox.Show(
             $"Post journal entry {journalNumber}?" &
             Environment.NewLine & Environment.NewLine &
             "Make sure the entry is correct. Posting may affect accounting reports.",
             "Confirm Journal Posting",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,
-            MessageBoxDefaultButton.Button2)
-
-        If confirmation <> DialogResult.Yes Then Return
+            MessageBoxDefaultButton.Button2) <> DialogResult.Yes Then
+            Return
+        End If
 
         isPosting = True
         postButton.Enabled = False
@@ -416,15 +409,14 @@ Public Class JournalEntriesForm
         statusLabel.Text = $"Posting journal entry {journalNumber}..."
 
         Try
+            ApiSession.ApplyAuthorization()
+
             Using content As New StringContent(
-                "",
-                Encoding.UTF8,
-                "application/json")
+                "{}", Encoding.UTF8, "application/json")
 
                 Using response As HttpResponseMessage =
-                    Await apiClient.PostAsync(
-                        $"journal-entries/{entryId}/post",
-                        content)
+                    Await ApiSession.Client.PostAsync(
+                        $"journal-entries/{entryId}/post", content)
 
                     Dim body As String =
                         Await response.Content.ReadAsStringAsync()
@@ -441,7 +433,6 @@ Public Class JournalEntriesForm
                             "Posting Failed",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning)
-
                         Return
                     End If
                 End Using
@@ -480,70 +471,17 @@ Public Class JournalEntriesForm
         Await LoadJournalEntriesAsync()
     End Sub
 
-    Private Function ExtractApiMessage(body As String) As String
-        If String.IsNullOrWhiteSpace(body) Then
-            Return "The API returned no error details."
-        End If
-
-        Try
-            Using document As JsonDocument = JsonDocument.Parse(body)
-                Dim root As JsonElement = document.RootElement
-                Dim messageElement As JsonElement
-
-                If root.ValueKind = JsonValueKind.Object AndAlso
-                   root.TryGetProperty("message", messageElement) AndAlso
-                   messageElement.ValueKind = JsonValueKind.String Then
-
-                    Return messageElement.GetString()
-                End If
-
-                Dim errorsElement As JsonElement
-
-                If root.ValueKind = JsonValueKind.Object AndAlso
-                   root.TryGetProperty("errors", errorsElement) AndAlso
-                   errorsElement.ValueKind = JsonValueKind.Object Then
-
-                    Dim messages As New List(Of String)
-
-                    For Each propertyItem As JsonProperty In
-                        errorsElement.EnumerateObject()
-
-                        If propertyItem.Value.ValueKind =
-                            JsonValueKind.Array Then
-
-                            For Each item As JsonElement In
-                                propertyItem.Value.EnumerateArray()
-
-                                If item.ValueKind = JsonValueKind.String Then
-                                    messages.Add(item.GetString())
-                                End If
-                            Next
-                        End If
-                    Next
-
-                    If messages.Count > 0 Then
-                        Return String.Join(Environment.NewLine, messages)
-                    End If
-                End If
-            End Using
-
-        Catch
-            ' Return the response body if it is not valid JSON.
-        End Try
-
-        Return body
-    End Function
-
     Private Async Function LoadSelectedEntryLinesAsync(
         entryId As Integer
     ) As Task
-
         statusLabel.Text = "Loading selected journal entry details..."
         linesGrid.DataSource = Nothing
 
         Try
+            ApiSession.ApplyAuthorization()
+
             Using response As HttpResponseMessage =
-                Await apiClient.GetAsync($"journal-entries/{entryId}")
+                Await ApiSession.Client.GetAsync($"journal-entries/{entryId}")
 
                 Dim body As String =
                     Await response.Content.ReadAsStringAsync()
@@ -563,7 +501,6 @@ Public Class JournalEntriesForm
                     If root.ValueKind = JsonValueKind.Object AndAlso
                        root.TryGetProperty("data", dataElement) AndAlso
                        dataElement.ValueKind = JsonValueKind.Object Then
-
                         entryElement = dataElement
                     End If
 
@@ -572,8 +509,7 @@ Public Class JournalEntriesForm
                             entryElement.GetRawText(), jsonOptions)
 
                     If entry Is Nothing Then
-                        statusLabel.Text =
-                            "The API returned an empty journal entry."
+                        statusLabel.Text = "The API returned an empty journal entry."
                         Return
                     End If
 
@@ -585,7 +521,10 @@ Public Class JournalEntriesForm
                     For Each line As JournalLineItem In entryLines
                         detailRows.Add(New JournalLineRow With {
                             .AccountID = line.AccountId,
-                            .AccountName = If(line.Account?.Name, ""),
+                            .AccountName = If(
+                                line.Account Is Nothing,
+                                "",
+                                $"{line.Account.AccountCode} - {line.Account.Name}"),
                             .Description = If(line.Description, ""),
                             .DebitAmount = line.DebitAmount,
                             .CreditAmount = line.CreditAmount
@@ -610,7 +549,8 @@ Public Class JournalEntriesForm
                         entryLines.Sum(Function(line) line.CreditAmount)
 
                     Dim balanceText As String =
-                        If(Math.Abs(debitTotal - creditTotal) < 0.005D,
+                        If(entryLines.Count >= 2 AndAlso
+                           Math.Abs(debitTotal - creditTotal) < 0.005D,
                            "Balanced",
                            "Not balanced")
 
@@ -621,7 +561,6 @@ Public Class JournalEntriesForm
 
                     If entriesGrid.CurrentRow IsNot Nothing AndAlso
                        entriesGrid.Columns.Contains("Status") Then
-
                         entriesGrid.CurrentRow.Cells("Status").Value = entry.Status
                     End If
                 End Using
@@ -643,11 +582,57 @@ Public Class JournalEntriesForm
         End Try
     End Function
 
+    Private Function ExtractApiMessage(body As String) As String
+        If String.IsNullOrWhiteSpace(body) Then
+            Return "The API returned no error details."
+        End If
+
+        Try
+            Using document As JsonDocument = JsonDocument.Parse(body)
+                Dim root As JsonElement = document.RootElement
+                Dim messageElement As JsonElement
+
+                If root.ValueKind = JsonValueKind.Object AndAlso
+                   root.TryGetProperty("message", messageElement) AndAlso
+                   messageElement.ValueKind = JsonValueKind.String Then
+                    Return messageElement.GetString()
+                End If
+
+                Dim errorsElement As JsonElement
+
+                If root.ValueKind = JsonValueKind.Object AndAlso
+                   root.TryGetProperty("errors", errorsElement) AndAlso
+                   errorsElement.ValueKind = JsonValueKind.Object Then
+
+                    Dim messages As New List(Of String)
+
+                    For Each propertyItem As JsonProperty In errorsElement.EnumerateObject()
+                        If propertyItem.Value.ValueKind = JsonValueKind.Array Then
+                            For Each item As JsonElement In propertyItem.Value.EnumerateArray()
+                                If item.ValueKind = JsonValueKind.String Then
+                                    messages.Add(item.GetString())
+                                End If
+                            Next
+                        End If
+                    Next
+
+                    If messages.Count > 0 Then
+                        Return String.Join(Environment.NewLine, messages)
+                    End If
+                End If
+            End Using
+        Catch
+            ' Use the response body if it is not JSON.
+        End Try
+
+        Return body
+    End Function
+
     Protected Overrides Sub OnFormClosed(e As FormClosedEventArgs)
         RemoveHandler entriesGrid.SelectionChanged,
             AddressOf EntriesGrid_SelectionChanged
 
-        apiClient.Dispose()
+        ' ApiSession.Client is shared with other forms. Do not dispose it here.
         MyBase.OnFormClosed(e)
     End Sub
 

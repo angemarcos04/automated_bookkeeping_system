@@ -1,4 +1,3 @@
-
 Imports System.Drawing
 Imports System.Net.Http
 Imports System.Net.Http.Json
@@ -25,6 +24,7 @@ Public Class CashReceiptsForm
     Private ReadOnly statusLabel As New Label()
     Private ReadOnly saveButton As New Button()
     Private ReadOnly refreshButton As New Button()
+    Private ReadOnly postButton As New Button()
 
     Private ReadOnly jsonOptions As New JsonSerializerOptions With {
         .PropertyNameCaseInsensitive = True
@@ -81,9 +81,11 @@ Public Class CashReceiptsForm
         <JsonPropertyName("deposit_account_id")>
         Public Property DepositAccountId As Integer?
 
-        ' Accept the API amount as either a JSON number or a numeric string.
         <JsonPropertyName("amount")>
         Public Property Amount As JsonElement
+
+        <JsonPropertyName("status")>
+        Public Property Status As String
 
         Public ReadOnly Property AmountValue As Decimal
             Get
@@ -99,6 +101,7 @@ Public Class CashReceiptsForm
                         NumberStyles.Any,
                         CultureInfo.InvariantCulture,
                         parsed) Then
+
                         Return parsed
                     End If
                 End If
@@ -123,8 +126,8 @@ Public Class CashReceiptsForm
     Public Sub New()
         Text = "Cash Receipts Book"
         StartPosition = FormStartPosition.CenterScreen
-        Size = New Size(1250, 780)
-        MinimumSize = New Size(1050, 650)
+        Size = New Size(1350, 800)
+        MinimumSize = New Size(1100, 680)
         BackColor = Color.FromArgb(245, 250, 246)
         Font = New Font("Segoe UI", 9.0F)
 
@@ -160,7 +163,7 @@ Public Class CashReceiptsForm
         }
 
         Dim subtitle As New Label With {
-            .Text = "Record incoming funds and automatically create the accounting entry.",
+            .Text = "Record incoming funds and manage their accounting status.",
             .ForeColor = Color.FromArgb(90, 110, 98),
             .AutoSize = True,
             .Location = New Point(2, 40)
@@ -187,10 +190,12 @@ Public Class CashReceiptsForm
         For i As Integer = 0 To 3
             entryPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 20))
         Next
+
         entryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 42))
 
         ConfigureInput(receiptDatePicker)
         receiptDatePicker.Format = DateTimePickerFormat.Short
+
         ConfigureInput(orNumberInput)
         ConfigureInput(payorInput)
         ConfigureInput(glAccountCombo)
@@ -201,6 +206,7 @@ Public Class CashReceiptsForm
 
         glAccountCombo.DropDownStyle = ComboBoxStyle.DropDownList
         depositAccountCombo.DropDownStyle = ComboBoxStyle.DropDownList
+
         remarksInput.Multiline = True
         remarksInput.ScrollBars = ScrollBars.Vertical
 
@@ -218,7 +224,7 @@ Public Class CashReceiptsForm
         statusLabel.ForeColor = Color.FromArgb(65, 85, 72)
 
         saveButton.Text = "Save Receipt"
-        saveButton.Width = 130
+        saveButton.Width = 115
         saveButton.Height = 32
         saveButton.BackColor = Color.FromArgb(42, 125, 82)
         saveButton.ForeColor = Color.White
@@ -227,9 +233,19 @@ Public Class CashReceiptsForm
         AddHandler saveButton.Click, AddressOf SaveReceiptClicked
 
         refreshButton.Text = "Refresh List"
-        refreshButton.Width = 110
+        refreshButton.Width = 100
         refreshButton.Height = 32
         AddHandler refreshButton.Click, AddressOf RefreshClicked
+
+        postButton.Text = "Post Selected"
+        postButton.Width = 115
+        postButton.Height = 32
+        postButton.BackColor = Color.FromArgb(38, 95, 65)
+        postButton.ForeColor = Color.White
+        postButton.FlatStyle = FlatStyle.Flat
+        postButton.FlatAppearance.BorderSize = 0
+        postButton.Enabled = False
+        AddHandler postButton.Click, AddressOf PostReceiptClicked
 
         Dim buttons As New FlowLayoutPanel With {
             .Dock = DockStyle.Fill,
@@ -237,6 +253,7 @@ Public Class CashReceiptsForm
             .WrapContents = False
         }
 
+        buttons.Controls.Add(postButton)
         buttons.Controls.Add(saveButton)
         buttons.Controls.Add(refreshButton)
 
@@ -260,39 +277,52 @@ Public Class CashReceiptsForm
         receiptsGrid.RowHeadersVisible = False
 
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
+            .Name = "Id",
+            .HeaderText = "ID",
+            .DataPropertyName = "Id",
+            .Visible = False
+        })
+
+        receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "ReceiptDate",
             .HeaderText = "Receipt Date",
-            .DataPropertyName = "ReceiptDate"
+            .DataPropertyName = "ReceiptDate",
+            .FillWeight = 90
         })
 
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "OrNumber",
             .HeaderText = "OR Number",
-            .DataPropertyName = "OrNumber"
+            .DataPropertyName = "OrNumber",
+            .FillWeight = 85
         })
 
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "Payor",
             .HeaderText = "Payor",
-            .DataPropertyName = "Payor"
+            .DataPropertyName = "Payor",
+            .FillWeight = 110
         })
 
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "GlAccount",
             .HeaderText = "GL / Credit Account",
-            .DataPropertyName = "GlAccount"
+            .DataPropertyName = "GlAccount",
+            .FillWeight = 125
         })
 
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "DepositAccount",
             .HeaderText = "Deposit Account",
-            .DataPropertyName = "DepositAccount"
+            .DataPropertyName = "DepositAccount",
+            .FillWeight = 125
         })
 
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "Amount",
             .HeaderText = "Amount",
             .DataPropertyName = "Amount",
+            .FillWeight = 75,
             .DefaultCellStyle = New DataGridViewCellStyle With {
                 .Format = "N2"
             }
@@ -301,8 +331,19 @@ Public Class CashReceiptsForm
         receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
             .Name = "Bank",
             .HeaderText = "Bank Deposited",
-            .DataPropertyName = "Bank"
+            .DataPropertyName = "Bank",
+            .FillWeight = 100
         })
+
+        receiptsGrid.Columns.Add(New DataGridViewTextBoxColumn With {
+            .Name = "Status",
+            .HeaderText = "Status",
+            .DataPropertyName = "Status",
+            .FillWeight = 65
+        })
+
+        AddHandler receiptsGrid.SelectionChanged,
+            AddressOf ReceiptSelectionChanged
 
         Dim listPanel As New Panel With {
             .Dock = DockStyle.Fill,
@@ -321,6 +362,7 @@ Public Class CashReceiptsForm
         listPanel.Controls.Add(receiptsGrid)
         listPanel.Controls.Add(listTitle)
         receiptsGrid.BringToFront()
+
         root.Controls.Add(listPanel, 0, 2)
     End Sub
 
@@ -427,6 +469,7 @@ Public Class CashReceiptsForm
 
                 Dim displayRows = receipts.Select(
                     Function(r) New With {
+                        .Id = r.Id,
                         .ReceiptDate = r.ReceiptDate,
                         .OrNumber = r.OrNumber,
                         .Payor = r.Payor,
@@ -439,11 +482,16 @@ Public Class CashReceiptsForm
                                                 r.DepositAccountId.Value.ToString(),
                                                 "")),
                         .Amount = r.AmountValue,
-                        .Bank = r.BankDeposited
+                        .Bank = r.BankDeposited,
+                        .Status = If(String.IsNullOrWhiteSpace(r.Status),
+                                     "Unknown",
+                                     r.Status)
                     }).ToList()
 
                 receiptsGrid.DataSource = Nothing
                 receiptsGrid.DataSource = displayRows
+
+                UpdatePostButton()
 
                 SetStatus($"{receipts.Count} receipt(s) loaded.")
             End Using
@@ -452,6 +500,31 @@ Public Class CashReceiptsForm
             SetStatus("Could not load receipts: " & ex.Message, True)
         End Try
     End Function
+
+    Private Sub ReceiptSelectionChanged(sender As Object, e As EventArgs)
+        UpdatePostButton()
+    End Sub
+
+    Private Sub UpdatePostButton()
+        postButton.Enabled = False
+
+        If receiptsGrid.CurrentRow Is Nothing Then
+            Return
+        End If
+
+        Dim statusValue As Object =
+            receiptsGrid.CurrentRow.Cells("Status").Value
+
+        If statusValue Is Nothing OrElse statusValue Is DBNull.Value Then
+            Return
+        End If
+
+        Dim receiptStatus As String = statusValue.ToString()
+
+        postButton.Enabled =
+            String.Equals(receiptStatus, "Draft",
+                          StringComparison.OrdinalIgnoreCase)
+    End Sub
 
     Private Async Sub SaveReceiptClicked(sender As Object, e As EventArgs)
         If String.IsNullOrWhiteSpace(orNumberInput.Text) Then
@@ -470,22 +543,30 @@ Public Class CashReceiptsForm
 
         If glAccountCombo.SelectedItem Is Nothing OrElse
            depositAccountCombo.SelectedItem Is Nothing Then
-            MessageBox.Show("Select both the GL account and the deposit account.",
-                            "Required Field", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+
+            MessageBox.Show(
+                "Select both the GL account and the deposit account.",
+                "Required Field",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+
             Return
         End If
 
         Dim amount As Decimal
+
         If Not Decimal.TryParse(
             amountInput.Text,
             NumberStyles.Number,
             CultureInfo.CurrentCulture,
             amount) OrElse amount <= 0D Then
 
-            MessageBox.Show("Enter a valid amount greater than zero.",
-                            "Invalid Amount",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning)
+            MessageBox.Show(
+                "Enter a valid amount greater than zero.",
+                "Invalid Amount",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+
             amountInput.Focus()
             Return
         End If
@@ -497,10 +578,12 @@ Public Class CashReceiptsForm
             DirectCast(depositAccountCombo.SelectedItem, AccountItem)
 
         If glAccount.Id = depositAccount.Id Then
-            MessageBox.Show("Choose different GL and deposit accounts.",
-                            "Invalid Account Selection",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning)
+            MessageBox.Show(
+                "Choose different GL and deposit accounts.",
+                "Invalid Account Selection",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+
             Return
         End If
 
@@ -519,12 +602,13 @@ Public Class CashReceiptsForm
 
         Try
             saveButton.Enabled = False
-            SetStatus("Saving receipt...")
+            SetStatus("Saving receipt as Draft...")
 
             ApiSession.ApplyAuthorization()
 
             Using response As HttpResponseMessage =
-                Await ApiSession.Client.PostAsJsonAsync("cash-receipts", payload)
+                Await ApiSession.Client.PostAsJsonAsync(
+                    "cash-receipts", payload)
 
                 Dim body As String =
                     Await response.Content.ReadAsStringAsync()
@@ -541,7 +625,10 @@ Public Class CashReceiptsForm
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning)
 
-                        SetStatus("Duplicate OR number. Enter a unique number.", True)
+                        SetStatus(
+                            "Duplicate OR number. Enter a unique number.",
+                            True)
+
                         Return
                     End If
 
@@ -553,7 +640,7 @@ Public Class CashReceiptsForm
 
                 MessageBox.Show(
                     If(String.IsNullOrWhiteSpace(result?.Message),
-                       "Receipt saved successfully.",
+                       "Receipt saved as Draft.",
                        result.Message),
                     "Cash Receipt Saved",
                     MessageBoxButtons.OK,
@@ -565,16 +652,147 @@ Public Class CashReceiptsForm
 
         Catch ex As Exception
             SetStatus("Could not save receipt: " & ex.Message, True)
-            MessageBox.Show(ex.Message, "Save Failed",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error)
+
+            MessageBox.Show(
+                ex.Message,
+                "Save Failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error)
+
         Finally
             saveButton.Enabled = True
         End Try
     End Sub
 
+    Private Async Sub PostReceiptClicked(sender As Object, e As EventArgs)
+        If receiptsGrid.CurrentRow Is Nothing Then
+            MessageBox.Show(
+                "Select a Draft receipt first.",
+                "No Receipt Selected",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+
+            Return
+        End If
+
+        Dim idValue As Object =
+            receiptsGrid.CurrentRow.Cells("Id").Value
+
+        Dim statusValue As Object =
+            receiptsGrid.CurrentRow.Cells("Status").Value
+
+        If idValue Is Nothing OrElse
+           idValue Is DBNull.Value OrElse
+           statusValue Is Nothing OrElse
+           statusValue Is DBNull.Value Then
+
+            MessageBox.Show(
+                "The selected receipt information is incomplete.",
+                "Cannot Post Receipt",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+
+            Return
+        End If
+
+        Dim receiptId As Integer
+
+        If Not Integer.TryParse(idValue.ToString(), receiptId) Then
+            SetStatus("Could not identify the selected receipt.", True)
+            Return
+        End If
+
+        Dim receiptStatus As String = statusValue.ToString()
+
+        If Not String.Equals(
+            receiptStatus,
+            "Draft",
+            StringComparison.OrdinalIgnoreCase) Then
+
+            MessageBox.Show(
+                "Only Draft receipts can be posted.",
+                "Receipt Already Processed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information)
+
+            Return
+        End If
+
+        Dim orNumber As String =
+            Convert.ToString(receiptsGrid.CurrentRow.Cells("OrNumber").Value)
+
+        Dim confirmation As DialogResult = MessageBox.Show(
+            $"Post receipt OR {orNumber}?{Environment.NewLine}{Environment.NewLine}" &
+            "This will post its journal entry and include it in posted accounting reports.",
+            "Confirm Posting",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question)
+
+        If confirmation <> DialogResult.Yes Then
+            Return
+        End If
+
+        Try
+            postButton.Enabled = False
+            saveButton.Enabled = False
+            refreshButton.Enabled = False
+
+            SetStatus("Posting receipt...")
+
+            ApiSession.ApplyAuthorization()
+
+            Using response As HttpResponseMessage =
+                Await ApiSession.Client.PostAsync(
+                    $"cash-receipts/{receiptId}/post",
+                    Nothing)
+
+                Dim body As String =
+                    Await response.Content.ReadAsStringAsync()
+
+                If Not response.IsSuccessStatusCode Then
+                    Throw New Exception(body)
+                End If
+
+                Dim result = JsonSerializer.Deserialize(
+                    Of ApiResponse(Of ReceiptItem))(body, jsonOptions)
+
+                MessageBox.Show(
+                    If(String.IsNullOrWhiteSpace(result?.Message),
+                       "Receipt posted successfully.",
+                       result.Message),
+                    "Receipt Posted",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information)
+
+                Await LoadReceiptsAsync()
+                SetStatus($"Receipt OR {orNumber} has been posted.")
+            End Using
+
+        Catch ex As Exception
+            SetStatus("Could not post receipt: " & ex.Message, True)
+
+            MessageBox.Show(
+                ex.Message,
+                "Posting Failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error)
+
+        Finally
+            saveButton.Enabled = True
+            refreshButton.Enabled = True
+            UpdatePostButton()
+        End Try
+    End Sub
+
     Private Async Sub RefreshClicked(sender As Object, e As EventArgs)
-        Await LoadAccountsAsync()
-        Await LoadReceiptsAsync()
+        refreshButton.Enabled = False
+
+        Try
+            Await LoadAccountsAsync()
+            Await LoadReceiptsAsync()
+        Finally
+            refreshButton.Enabled = True
+        End Try
     End Sub
 
     Private Sub ClearInputs()
@@ -594,10 +812,15 @@ Public Class CashReceiptsForm
         End If
     End Sub
 
-    Private Sub SetStatus(message As String,
-                          Optional isError As Boolean = False)
+    Private Sub SetStatus(
+        message As String,
+        Optional isError As Boolean = False)
+
         statusLabel.Text = message
+
         statusLabel.ForeColor =
-            If(isError, Color.Firebrick, Color.FromArgb(65, 85, 72))
+            If(isError,
+               Color.Firebrick,
+               Color.FromArgb(65, 85, 72))
     End Sub
 End Class

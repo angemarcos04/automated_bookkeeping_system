@@ -16,6 +16,7 @@ class CashReceipt extends Model
         'amount',
         'bank_deposited',
         'remarks',
+        'status',
     ];
 
     protected $casts = [

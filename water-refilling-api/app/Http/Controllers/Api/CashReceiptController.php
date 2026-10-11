@@ -27,10 +27,8 @@ class CashReceiptController extends Controller
         ]);
     }
 
-    public function store(
-        Request $request,
-        JournalEntryService $journalEntryService
-    ): JsonResponse {
+    public function store(Request $request): JsonResponse
+    {
         $validated = $request->validate([
             'receipt_date' => ['required', 'date'],
             'or_number' => [
@@ -40,11 +38,7 @@ class CashReceiptController extends Controller
                 'unique:cash_receipts,or_number',
             ],
             'payor' => ['required', 'string', 'max:150'],
-            'account_id' => [
-                'required',
-                'integer',
-                'exists:accounts,id',
-            ],
+            'account_id' => ['required', 'integer', 'exists:accounts,id'],
             'deposit_account_id' => [
                 'required',
                 'integer',
@@ -55,11 +49,7 @@ class CashReceiptController extends Controller
             'remarks' => ['nullable', 'string'],
         ]);
 
-        $cashReceipt = DB::transaction(function () use (
-            $validated,
-            $request,
-            $journalEntryService
-        ) {
+        $receipt = DB::transaction(function () use ($validated, $request) {
             $depositAccount = Account::findOrFail(
                 $validated['deposit_account_id']
             );
@@ -68,17 +58,10 @@ class CashReceiptController extends Controller
                 $validated['account_id']
             );
 
-            if (! $depositAccount->is_active) {
+            if (! $depositAccount->is_active ||
+                ! $creditAccount->is_active) {
                 throw ValidationException::withMessages([
-                    'deposit_account_id' =>
-                        'The selected deposit account is inactive.',
-                ]);
-            }
-
-            if (! $creditAccount->is_active) {
-                throw ValidationException::withMessages([
-                    'account_id' =>
-                        'The selected GL account is inactive.',
+                    'account_id' => 'Both selected accounts must be active.',
                 ]);
             }
 
@@ -92,11 +75,27 @@ class CashReceiptController extends Controller
             if ($depositAccount->id === $creditAccount->id) {
                 throw ValidationException::withMessages([
                     'account_id' =>
-                        'The deposit account and GL account must be different.',
+                        'The deposit account and GL account must differ.',
                 ]);
             }
 
-            $cashReceipt = CashReceipt::create($validated);
+            $receiptData = $validated;
+            $receiptData['status'] = 'Draft';
+
+            $receipt = CashReceipt::create($receiptData);
+
+            $entry = JournalEntry::create([
+                'journal_number' => 'CR-' . $receipt->id,
+                'journal_date' => $validated['receipt_date'],
+                'description' => 'Cash receipt OR '
+                    . $validated['or_number']
+                    . ' - '
+                    . $validated['payor'],
+                'reference_type' => 'CashReceipt',
+                'reference_id' => $receipt->id,
+                'status' => 'Draft',
+                'created_by' => $request->user()?->id,
+            ]);
 
             $amount = number_format(
                 (float) $validated['amount'],
@@ -104,19 +103,6 @@ class CashReceiptController extends Controller
                 '.',
                 ''
             );
-
-            $entry = JournalEntry::create([
-                'journal_number' => 'CR-' . $cashReceipt->id,
-                'journal_date' => $validated['receipt_date'],
-                'description' => 'Cash receipt OR '
-                    . $validated['or_number']
-                    . ' - '
-                    . $validated['payor'],
-                'reference_type' => 'CashReceipt',
-                'reference_id' => $cashReceipt->id,
-                'status' => 'Draft',
-                'created_by' => $request->user()?->id,
-            ]);
 
             $entry->lines()->createMany([
                 [
@@ -135,9 +121,7 @@ class CashReceiptController extends Controller
                 ],
             ]);
 
-            $journalEntryService->post($entry);
-
-            return $cashReceipt->load([
+            return $receipt->load([
                 'account',
                 'depositAccount',
             ]);
@@ -145,10 +129,58 @@ class CashReceiptController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' =>
-                'Cash receipt created and journal entry posted successfully.',
-            'data' => $cashReceipt,
+            'message' => 'Cash receipt saved as Draft.',
+            'data' => $receipt,
         ], 201);
+    }
+
+    public function post(
+        CashReceipt $cashReceipt,
+        JournalEntryService $journalEntryService
+    ): JsonResponse {
+        return DB::transaction(function () use (
+            $cashReceipt,
+            $journalEntryService
+        ) {
+            $receipt = CashReceipt::whereKey($cashReceipt->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($receipt->status !== 'Draft') {
+                throw ValidationException::withMessages([
+                    'status' => 'Only Draft receipts can be posted.',
+                ]);
+            }
+
+            $entry = JournalEntry::where(
+                'reference_type',
+                'CashReceipt'
+            )
+                ->where('reference_id', $receipt->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $entry) {
+                throw ValidationException::withMessages([
+                    'journal_entry' =>
+                        'No journal entry exists for this receipt.',
+                ]);
+            }
+
+            $journalEntryService->post($entry);
+
+            $receipt->status = 'Posted';
+            $receipt->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash receipt posted successfully.',
+                'data' => $receipt->load([
+                    'account',
+                    'depositAccount',
+                ]),
+            ]);
+        });
     }
 
     public function show(CashReceipt $cashReceipt): JsonResponse
@@ -166,18 +198,9 @@ class CashReceiptController extends Controller
         Request $request,
         CashReceipt $cashReceipt
     ): JsonResponse {
-        $hasJournalEntry = JournalEntry::where(
-            'reference_type',
-            'CashReceipt'
-        )
-            ->where('reference_id', $cashReceipt->id)
-            ->exists();
-
-        if ($hasJournalEntry) {
+        if ($cashReceipt->status !== 'Draft') {
             throw ValidationException::withMessages([
-                'cash_receipt' =>
-                    'This receipt has an accounting entry. '
-                    . 'Editing it is disabled to preserve the audit trail.',
+                'status' => 'Only Draft receipts can be edited.',
             ]);
         }
 
@@ -190,11 +213,7 @@ class CashReceiptController extends Controller
                 'unique:cash_receipts,or_number,' . $cashReceipt->id,
             ],
             'payor' => ['required', 'string', 'max:150'],
-            'account_id' => [
-                'required',
-                'integer',
-                'exists:accounts,id',
-            ],
+            'account_id' => ['required', 'integer', 'exists:accounts,id'],
             'deposit_account_id' => [
                 'required',
                 'integer',
@@ -205,12 +224,79 @@ class CashReceiptController extends Controller
             'remarks' => ['nullable', 'string'],
         ]);
 
-        $cashReceipt->update($validated);
+        DB::transaction(function () use ($validated, $cashReceipt) {
+            $depositAccount = Account::findOrFail(
+                $validated['deposit_account_id']
+            );
+
+            $creditAccount = Account::findOrFail(
+                $validated['account_id']
+            );
+
+            if (! $depositAccount->is_active ||
+                ! $creditAccount->is_active ||
+                $depositAccount->account_type !== 'Asset' ||
+                $depositAccount->id === $creditAccount->id) {
+                throw ValidationException::withMessages([
+                    'account_id' => 'The selected accounts are invalid.',
+                ]);
+            }
+
+            $cashReceipt->update($validated);
+
+            $entry = JournalEntry::where(
+                'reference_type',
+                'CashReceipt'
+            )
+                ->where('reference_id', $cashReceipt->id)
+                ->where('status', 'Draft')
+                ->firstOrFail();
+
+            $entry->update([
+                'journal_date' => $validated['receipt_date'],
+                'description' => 'Cash receipt OR '
+                    . $validated['or_number']
+                    . ' - '
+                    . $validated['payor'],
+            ]);
+
+            $amount = number_format(
+                (float) $validated['amount'],
+                2,
+                '.',
+                ''
+            );
+
+            $lines = $entry->lines()->orderBy('id')->get();
+
+            if ($lines->count() !== 2) {
+                throw ValidationException::withMessages([
+                    'journal_entry' =>
+                        'Expected two journal lines for this receipt.',
+                ]);
+            }
+
+            $lines[0]->update([
+                'account_id' => $depositAccount->id,
+                'description' => 'Cash received - '
+                    . $validated['payor'],
+                'debit_amount' => $amount,
+                'credit_amount' => '0.00',
+            ]);
+
+            $lines[1]->update([
+                'account_id' => $creditAccount->id,
+                'description' => 'Receipt income/account - '
+                    . $validated['payor'],
+                'debit_amount' => '0.00',
+                'credit_amount' => $amount,
+            ]);
+        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Cash receipt updated successfully.',
-            'data' => $cashReceipt->load([
+            'message' => 'Draft receipt updated successfully.',
+            'data' => $cashReceipt->fresh()->load([
                 'account',
                 'depositAccount',
             ]),
@@ -219,26 +305,38 @@ class CashReceiptController extends Controller
 
     public function destroy(CashReceipt $cashReceipt): JsonResponse
     {
-        $hasJournalEntry = JournalEntry::where(
-            'reference_type',
-            'CashReceipt'
-        )
-            ->where('reference_id', $cashReceipt->id)
-            ->exists();
-
-        if ($hasJournalEntry) {
+        if ($cashReceipt->status !== 'Draft') {
             throw ValidationException::withMessages([
-                'cash_receipt' =>
-                    'This receipt has an accounting entry. '
-                    . 'Deleting it is disabled to preserve the audit trail.',
+                'status' => 'Only Draft receipts can be deleted.',
             ]);
         }
 
-        $cashReceipt->delete();
+        DB::transaction(function () use ($cashReceipt) {
+            $entry = JournalEntry::where(
+                'reference_type',
+                'CashReceipt'
+            )
+                ->where('reference_id', $cashReceipt->id)
+                ->first();
+
+            if ($entry && $entry->status !== 'Draft') {
+                throw ValidationException::withMessages([
+                    'journal_entry' =>
+                        'A posted journal entry cannot be deleted.',
+                ]);
+            }
+
+            if ($entry) {
+                $entry->lines()->delete();
+                $entry->delete();
+            }
+
+            $cashReceipt->delete();
+        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Cash receipt deleted successfully.',
+            'message' => 'Draft receipt deleted successfully.',
         ]);
     }
 }

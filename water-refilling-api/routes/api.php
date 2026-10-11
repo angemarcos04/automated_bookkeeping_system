@@ -29,8 +29,6 @@ use App\Http\Controllers\Api\LapsingScheduleController;
 |--------------------------------------------------------------------------
 */
 
-
-
 Route::post('/login', function (Request $request) {
     $request->validate([
         'email' => ['required', 'email'],
@@ -39,7 +37,7 @@ Route::post('/login', function (Request $request) {
 
     $user = User::where('email', $request->email)->first();
 
-    if (!$user || !Hash::check($request->password, $user->password)) {
+    if (! $user || ! Hash::check($request->password, $user->password)) {
         return response()->json([
             'success' => false,
             'message' => 'Invalid email or password.',
@@ -62,186 +60,199 @@ Route::post('/login', function (Request $request) {
     ]);
 });
 
+/*
+|--------------------------------------------------------------------------
+| Protected API Routes
+|--------------------------------------------------------------------------
+*/
+
 Route::middleware('auth:sanctum')->group(function () {
 
-/*
-|--------------------------------------------------------------------------
-| Dashboard
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard', [DashboardController::class, 'index']);
 
-/*
-|--------------------------------------------------------------------------
-| Customers
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Customers
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/customers', [CustomerController::class, 'index']);
-Route::post('/customers', [CustomerController::class, 'store']);
-Route::get('/customers/{customer}', [CustomerController::class, 'show']);
-Route::put('/customers/{customer}', [CustomerController::class, 'update']);
-Route::delete('/customers/{customer}', [CustomerController::class, 'destroy']);
+    Route::get('/customers', [CustomerController::class, 'index']);
+    Route::post('/customers', [CustomerController::class, 'store']);
+    Route::get('/customers/{customer}', [CustomerController::class, 'show']);
+    Route::put('/customers/{customer}', [CustomerController::class, 'update']);
+    Route::delete('/customers/{customer}', [CustomerController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Vendors / Payees
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Vendors / Payees
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/vendors', [VendorController::class, 'index']);
-Route::post('/vendors', [VendorController::class, 'store']);
-Route::get('/vendors/{vendor}', [VendorController::class, 'show']);
-Route::put('/vendors/{vendor}', [VendorController::class, 'update']);
-Route::delete('/vendors/{vendor}', [VendorController::class, 'destroy']);
+    Route::get('/vendors', [VendorController::class, 'index']);
+    Route::post('/vendors', [VendorController::class, 'store']);
+    Route::get('/vendors/{vendor}', [VendorController::class, 'show']);
+    Route::put('/vendors/{vendor}', [VendorController::class, 'update']);
+    Route::delete('/vendors/{vendor}', [VendorController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Employees
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Employees
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/employees', [EmployeeController::class, 'index']);
-Route::post('/employees', [EmployeeController::class, 'store']);
-Route::get('/employees/{employee}', [EmployeeController::class, 'show']);
-Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
-Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy']);
+    Route::get('/employees', [EmployeeController::class, 'index']);
+    Route::post('/employees', [EmployeeController::class, 'store']);
+    Route::get('/employees/{employee}', [EmployeeController::class, 'show']);
+    Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
+    Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Departments / Programs
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Departments / Programs
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/departments', [DepartmentController::class, 'index']);
-Route::post('/departments', [DepartmentController::class, 'store']);
-Route::get('/departments/{department}', [DepartmentController::class, 'show']);
-Route::put('/departments/{department}', [DepartmentController::class, 'update']);
-Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
+    Route::get('/departments', [DepartmentController::class, 'index']);
+    Route::post('/departments', [DepartmentController::class, 'store']);
+    Route::get('/departments/{department}', [DepartmentController::class, 'show']);
+    Route::put('/departments/{department}', [DepartmentController::class, 'update']);
+    Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Funds
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Funds
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/funds', [FundController::class, 'index']);
-Route::post('/funds', [FundController::class, 'store']);
-Route::get('/funds/{fund}', [FundController::class, 'show']);
-Route::put('/funds/{fund}', [FundController::class, 'update']);
-Route::delete('/funds/{fund}', [FundController::class, 'destroy']);
+    Route::get('/funds', [FundController::class, 'index']);
+    Route::post('/funds', [FundController::class, 'store']);
+    Route::get('/funds/{fund}', [FundController::class, 'show']);
+    Route::put('/funds/{fund}', [FundController::class, 'update']);
+    Route::delete('/funds/{fund}', [FundController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Fixed Assets
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Fixed Assets
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/fixed-assets', [FixedAssetController::class, 'index']);
-Route::post('/fixed-assets', [FixedAssetController::class, 'store']);
-Route::get('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'show']);
-Route::put('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'update']);
-Route::delete('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'destroy']);
+    Route::get('/fixed-assets', [FixedAssetController::class, 'index']);
+    Route::post('/fixed-assets', [FixedAssetController::class, 'store']);
+    Route::get('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'show']);
+    Route::put('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'update']);
+    Route::delete('/fixed-assets/{fixedAsset}', [FixedAssetController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Cash Receipts Book
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Cash Receipts Book
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/cash-receipts', [CashReceiptController::class, 'index']);
-Route::post('/cash-receipts', [CashReceiptController::class, 'store']);
-Route::get('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'show']);
-Route::put('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'update']);
-Route::delete('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'destroy']);
+    Route::get('/cash-receipts', [CashReceiptController::class, 'index']);
+    Route::post('/cash-receipts', [CashReceiptController::class, 'store']);
 
-/*
-|--------------------------------------------------------------------------
-| Cash Disbursements Book
-|--------------------------------------------------------------------------
-*/
+    // Post a Draft cash receipt.
+    Route::post(
+        '/cash-receipts/{cashReceipt}/post',
+        [CashReceiptController::class, 'post']
+    );
 
-Route::get('/cash-disbursements', [CashDisbursementController::class, 'index']);
-Route::post('/cash-disbursements', [CashDisbursementController::class, 'store']);
-Route::get('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'show']);
-Route::put('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'update']);
-Route::delete('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'destroy']);
+    Route::get('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'show']);
+    Route::put('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'update']);
+    Route::delete('/cash-receipts/{cashReceipt}', [CashReceiptController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Request for Payment (RFP)
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Cash Disbursements Book
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/rfps', [RfpController::class, 'index']);
-Route::post('/rfps', [RfpController::class, 'store']);
-Route::get('/rfps/{rfp}', [RfpController::class, 'show']);
-Route::put('/rfps/{rfp}', [RfpController::class, 'update']);
-Route::delete('/rfps/{rfp}', [RfpController::class, 'destroy']);
+    Route::get('/cash-disbursements', [CashDisbursementController::class, 'index']);
+    Route::post('/cash-disbursements', [CashDisbursementController::class, 'store']);
+    Route::get('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'show']);
+    Route::put('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'update']);
+    Route::delete('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Invoices
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Request for Payment (RFP)
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/invoices', [InvoiceController::class, 'index']);
-Route::post('/invoices', [InvoiceController::class, 'store']);
-Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
-Route::put('/invoices/{invoice}', [InvoiceController::class, 'update']);
-Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
+    Route::get('/rfps', [RfpController::class, 'index']);
+    Route::post('/rfps', [RfpController::class, 'store']);
+    Route::get('/rfps/{rfp}', [RfpController::class, 'show']);
+    Route::put('/rfps/{rfp}', [RfpController::class, 'update']);
+    Route::delete('/rfps/{rfp}', [RfpController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Cash/Check Vouchers
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Invoices
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/cash-check-vouchers', [CashCheckVoucherController::class, 'index']);
-Route::post('/cash-check-vouchers', [CashCheckVoucherController::class, 'store']);
-Route::get('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'show']);
-Route::put('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'update']);
-Route::delete('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'destroy']);
+    Route::get('/invoices', [InvoiceController::class, 'index']);
+    Route::post('/invoices', [InvoiceController::class, 'store']);
+    Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
+    Route::put('/invoices/{invoice}', [InvoiceController::class, 'update']);
+    Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Journal Entries
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Cash/Check Vouchers
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/journal-entries', [JournalEntryController::class, 'index']);
-Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show']);
-Route::post('/journal-entries', [JournalEntryController::class, 'store']);
-Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post']);
+    Route::get('/cash-check-vouchers', [CashCheckVoucherController::class, 'index']);
+    Route::post('/cash-check-vouchers', [CashCheckVoucherController::class, 'store']);
+    Route::get('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'show']);
+    Route::put('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'update']);
+    Route::delete('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| Accounting Reports
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Journal Entries
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/general-ledger', [GeneralLedgerController::class, 'index']);
-Route::get('/trial-balance', [TrialBalanceController::class, 'index']);
+    Route::get('/journal-entries', [JournalEntryController::class, 'index']);
+    Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show']);
+    Route::post('/journal-entries', [JournalEntryController::class, 'store']);
+    Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post']);
 
-/*
-|--------------------------------------------------------------------------
-| Chart of Accounts
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Accounting Reports
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/accounts', [AccountController::class, 'index']);
-Route::post('/accounts', [AccountController::class, 'store']);
-Route::get('/accounts/{account}', [AccountController::class, 'show']);
-Route::put('/accounts/{account}', [AccountController::class, 'update']);
-Route::patch('/accounts/{account}', [AccountController::class, 'update']);
-Route::delete('/accounts/{account}', [AccountController::class, 'destroy']);
+    Route::get('/general-ledger', [GeneralLedgerController::class, 'index']);
+    Route::get('/trial-balance', [TrialBalanceController::class, 'index']);
 
-/*
-|--------------------------------------------------------------------------
-| Lasping Schedule Report
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | Chart of Accounts
+    |--------------------------------------------------------------------------
+    */
 
-Route::get('/reports/lapsing-schedule', [LapsingScheduleController::class, 'index']);
+    Route::get('/accounts', [AccountController::class, 'index']);
+    Route::post('/accounts', [AccountController::class, 'store']);
+    Route::get('/accounts/{account}', [AccountController::class, 'show']);
+    Route::put('/accounts/{account}', [AccountController::class, 'update']);
+    Route::patch('/accounts/{account}', [AccountController::class, 'update']);
+    Route::delete('/accounts/{account}', [AccountController::class, 'destroy']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Lapsing Schedule Report
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/reports/lapsing-schedule', [LapsingScheduleController::class, 'index']);
 });
