@@ -4,81 +4,33 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FixedAsset;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class LapsingScheduleController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $validated = $request->validate([
+        $request->validate([
             'as_of' => ['sometimes', 'date'],
-            'date' => ['sometimes', 'date'],
-            'period' => ['sometimes', 'in:daily,weekly,monthly,yearly'],
         ]);
 
-        $period = $validated['period'] ?? 'daily';
-
-        $referenceDate = Carbon::parse(
-            $validated['date']
-                ?? $validated['as_of']
-                ?? now()->toDateString()
+        $asOf = Carbon::parse(
+            $request->query('as_of', now()->toDateString())
         )->startOfDay();
 
-        switch ($period) {
-            case 'weekly':
-                $startDate = $referenceDate->copy()->startOfWeek(
-                    Carbon::MONDAY
-                );
-                $endDate = $startDate->copy()->endOfWeek(
-                    Carbon::SUNDAY
-                );
-                break;
-
-            case 'monthly':
-                $startDate = $referenceDate->copy()->startOfMonth();
-                $endDate = $referenceDate->copy()->endOfMonth();
-                break;
-
-            case 'yearly':
-                $startDate = $referenceDate->copy()->startOfYear();
-                $endDate = $referenceDate->copy()->endOfYear();
-                break;
-
-            default:
-                $startDate = $referenceDate->copy()->startOfDay();
-                $endDate = $referenceDate->copy()->endOfDay();
-                break;
-        }
-
-        // The report is a snapshot as of the selected period's ending date.
-        $asOf = $endDate->copy()->startOfDay();
-
-        $assets = FixedAsset::query()
-            ->where('is_active', true)
-                ->whereNotNull('acquisition_date')
-                    ->whereDate(
-        'acquisition_date',
-        '<=',
-        $asOf->toDateString()
-    )
-        ->orderBy('asset_code')
-        ->get()
+        $assets = FixedAsset::where('is_active', true)
+            ->orderBy('asset_code')
+            ->get()
             ->map(function (FixedAsset $asset) use ($asOf) {
                 $cost = (float) $asset->acquisition_cost;
                 $salvage = (float) $asset->salvage_value;
                 $life = (float) $asset->useful_life_years;
 
-                $depreciableBase = max(0, $cost - $salvage);
+                $yearsElapsed = 0;
 
-                $annualDepreciation = $life > 0
-                    ? $depreciableBase / $life
-                    : 0;
-
-                $yearsElapsed = 0.0;
-
-                if ($asset->acquisition_date && $life > 0) {
+                if ($asset->acquisition_date) {
                     $acquired = Carbon::parse(
                         $asset->acquisition_date
                     )->startOfDay();
@@ -89,9 +41,15 @@ class LapsingScheduleController extends Controller
                     }
                 }
 
+                $depreciableBase = max(0, $cost - $salvage);
+
+                $annualDepreciation = $life > 0
+                    ? $depreciableBase / $life
+                    : 0;
+
                 $accumulatedDepreciation = min(
                     $depreciableBase,
-                    max(0, $annualDepreciation * $yearsElapsed)
+                    $annualDepreciation * $yearsElapsed
                 );
 
                 $netBookValue = max(
@@ -118,9 +76,6 @@ class LapsingScheduleController extends Controller
 
         return response()->json([
             'success' => true,
-            'period' => $period,
-            'period_start' => $startDate->toDateString(),
-            'period_end' => $endDate->toDateString(),
             'as_of' => $asOf->toDateString(),
             'data' => $assets,
         ]);

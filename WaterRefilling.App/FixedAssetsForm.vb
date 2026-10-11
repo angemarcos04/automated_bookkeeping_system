@@ -848,8 +848,26 @@ Public Class FixedAssetsForm
     End Function
 
     Private Sub AssetsGrid_SelectionChanged(sender As Object, e As EventArgs)
-        UpdateSelectionButtons()
-    End Sub
+    If isLoading OrElse isSaving OrElse isDeleting Then Return
+
+    ' Require the user to double-click an asset to load it for editing.
+    If assetsGrid.SelectedRows.Count = 0 Then
+        selectedAssetId = Nothing
+    Else
+        Dim row As DataGridViewRow = assetsGrid.SelectedRows(0)
+        Dim rowId As Integer
+        Dim rowIdText As String =
+            Convert.ToString(row.Cells("id").Value)
+
+        If Not Integer.TryParse(rowIdText, rowId) OrElse
+        Not selectedAssetId.HasValue OrElse
+        selectedAssetId.Value <> rowId Then
+            selectedAssetId = Nothing
+        End If
+    End If
+
+    UpdateSelectionButtons()
+End Sub
 
     Private Sub UpdateSelectionButtons()
         Dim hasSelectedGridRow As Boolean =

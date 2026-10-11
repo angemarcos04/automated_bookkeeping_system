@@ -17,8 +17,9 @@ Public Class GeneralLedgerForm
     Private ReadOnly statusLabel As New Label()
 
     Private ReadOnly jsonOptions As New JsonSerializerOptions With {
-        .PropertyNameCaseInsensitive = True
-    }
+    .PropertyNameCaseInsensitive = True,
+    .PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+}
 
     Private accounts As New List(Of LedgerAccountItem)()
 

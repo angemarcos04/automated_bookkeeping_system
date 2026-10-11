@@ -15,7 +15,7 @@ Imports System.Reflection
 <Assembly: System.Reflection.AssemblyCompanyAttribute("WaterRefilling.App"),  _
  Assembly: System.Reflection.AssemblyConfigurationAttribute("Debug"),  _
  Assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0"),  _
- Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1abe7deb2d0feb7aa3be25fd74b3ee0c5b7343e5"),  _
+ Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+581934fd5eb5b9fdd6c767c050a4c7e0795c7b22"),  _
  Assembly: System.Reflection.AssemblyProductAttribute("WaterRefilling.App"),  _
  Assembly: System.Reflection.AssemblyTitleAttribute("WaterRefilling.App"),  _
  Assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0"),  _

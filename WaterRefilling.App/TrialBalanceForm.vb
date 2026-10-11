@@ -13,8 +13,9 @@ Public Class TrialBalanceForm
     Private ReadOnly totalsLabel As New Label()
 
     Private ReadOnly jsonOptions As New JsonSerializerOptions With {
-        .PropertyNameCaseInsensitive = True
-    }
+    .PropertyNameCaseInsensitive = True,
+    .PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+}
 
     Public Sub New()
         Me.Text = "Trial Balance"

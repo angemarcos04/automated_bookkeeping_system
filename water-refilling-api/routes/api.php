@@ -241,12 +241,23 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/accounts', [AccountController::class, 'index']);
-    Route::post('/accounts', [AccountController::class, 'store']);
-    Route::get('/accounts/{account}', [AccountController::class, 'show']);
-    Route::put('/accounts/{account}', [AccountController::class, 'update']);
-    Route::patch('/accounts/{account}', [AccountController::class, 'update']);
-    Route::delete('/accounts/{account}', [AccountController::class, 'destroy']);
+    Route::get('/accounts', [AccountController::class, 'index'])
+    ->middleware('permission:accounts.view');
+
+Route::post('/accounts', [AccountController::class, 'store'])
+    ->middleware('permission:accounts.create');
+
+Route::get('/accounts/{account}', [AccountController::class, 'show'])
+    ->middleware('permission:accounts.view');
+
+Route::put('/accounts/{account}', [AccountController::class, 'update'])
+    ->middleware('permission:accounts.edit');
+
+Route::patch('/accounts/{account}', [AccountController::class, 'update'])
+    ->middleware('permission:accounts.edit');
+
+Route::delete('/accounts/{account}', [AccountController::class, 'destroy'])
+    ->middleware('permission:accounts.delete');
 
     /*
     |--------------------------------------------------------------------------
