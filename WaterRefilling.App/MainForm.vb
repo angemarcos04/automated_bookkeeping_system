@@ -81,17 +81,18 @@ Public Class MainForm
         sidebar.Controls.Add(subtitle)
 
         Dim menuItems As String() = {
-            "Dashboard",
-            "Authentication & Security",
-            "System Setup",
-            "Master Data",
-            "Fixed Assets",
-            "Transactions",
-            "General Ledger",
-            "Financial Reports",
-            "Audit Trail",
-            "Settings"
-        }
+        "Dashboard",
+        "Authentication & Security",
+        "System Setup",
+        "Master Data",
+        "Fixed Assets",
+        "Transactions",
+        "Journal Entries",
+        "General Ledger",
+        "Financial Reports",
+        "Audit Trail",
+        "Settings"
+}
 
         Dim y As Integer = 112
 
@@ -389,36 +390,109 @@ Public Class MainForm
         updateRegion()
     End Sub
 
-    Private Sub HandleNavigation(item As String)
-        Select Case item
-            Case "Dashboard"
-                pageTitle.Text = "Dashboard"
-                BuildDashboardContent()
 
-            Case "Master Data"
-                pageTitle.Text = "Master Data"
-                Using accounts As New ChartOfAccountsForm()
-                    accounts.ShowDialog(Me)
+
+Private Sub HandleNavigation(item As String)
+    Select Case item
+        Case "Dashboard"
+            pageTitle.Text = "Dashboard"
+            BuildDashboardContent()
+
+        Case "Master Data"
+            pageTitle.Text = "Chart of Accounts"
+            Using accounts As New ChartOfAccountsForm()
+                accounts.ShowDialog(Me)
+            End Using
+
+        Case "Transactions"
+            Dim choice As DialogResult = MessageBox.Show(
+                "Yes = Cash Receipts Book" & vbCrLf &
+                "No = Cash Disbursements",
+                "Transactions",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Question)
+
+            If choice = DialogResult.Yes Then
+                pageTitle.Text = "Cash Receipts Book"
+                Using receipts As New CashReceiptsForm()
+                    receipts.ShowDialog(Me)
                 End Using
-
-            Case "Fixed Assets"
-                pageTitle.Text = "Fixed Assets"
-                Using assets As New FixedAssetsForm()
-                    assets.ShowDialog(Me)
+            ElseIf choice = DialogResult.No Then
+                pageTitle.Text = "Cash Disbursements"
+                Using disbursements As New CashDisbursementsForm()
+                    disbursements.ShowDialog(Me)
                 End Using
+            End If
 
-            Case "Financial Reports"
-                pageTitle.Text = "Financial Reports"
+        Case "Journal Entries"
+            pageTitle.Text = "Journal Entries"
+            Using journal As New JournalEntriesForm()
+                journal.ShowDialog(Me)
+            End Using
+
+        Case "Fixed Assets"
+            pageTitle.Text = "Fixed Assets"
+            Using assets As New FixedAssetsForm()
+                assets.ShowDialog(Me)
+            End Using
+
+        Case "General Ledger"
+            pageTitle.Text = "General Ledger"
+            Using ledger As New GeneralLedgerForm()
+                ledger.ShowDialog(Me)
+            End Using
+
+        Case "Financial Reports"
+            Dim choice As DialogResult = MessageBox.Show(
+                "Yes = Lapsing Schedule" & vbCrLf &
+                "No = Trial Balance",
+                "Financial Reports",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Question)
+
+            If choice = DialogResult.Yes Then
+                pageTitle.Text = "Lapsing Schedule"
                 ShowLapsingSchedule()
+            ElseIf choice = DialogResult.No Then
+                pageTitle.Text = "Trial Balance"
+                Using trialBalance As New TrialBalanceForm()
+                    trialBalance.ShowDialog(Me)
+                End Using
+            End If
 
-            Case Else
-                MessageBox.Show(
-                    item & " will be implemented in a later step.",
-                    "Module Not Yet Connected",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information)
-        End Select
-    End Sub
+        Case Else
+            MessageBox.Show(
+                item & " is not connected yet.",
+                "Navigation",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information)
+    End Select
+End Sub
+
+Private Sub ShowTransactionsMenu()
+    Dim choice As DialogResult =
+        MessageBox.Show(
+            "Choose Yes for Cash Receipts or No for Cash Disbursements.",
+            "Transactions",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Question)
+
+    If choice = DialogResult.Yes Then
+        pageTitle.Text = "Cash Receipts Book"
+
+        Using receipts As New CashReceiptsForm()
+            receipts.ShowDialog(Me)
+        End Using
+
+    ElseIf choice = DialogResult.No Then
+        pageTitle.Text = "Cash Disbursements"
+
+        Using disbursements As New CashDisbursementsForm()
+            disbursements.ShowDialog(Me)
+        End Using
+    End If
+End Sub
+
 
     Private Async Sub ShowLapsingSchedule()
         workspace.Controls.Clear()
@@ -603,10 +677,10 @@ Public Class MainForm
         reportGrid.Rows.Clear()
 
         Try
-          Dim url As String =
+   Dim url As String =
     "reports/lapsing-schedule?period=" &
     Uri.EscapeDataString(period.ToLowerInvariant()) &
-    "&date=" & startDate.ToString("yyyy-MM-dd")
+    "&date=" & endDate.ToString("yyyy-MM-dd")
 
             Dim totalCost As Decimal = 0D
             Dim totalAnnual As Decimal = 0D

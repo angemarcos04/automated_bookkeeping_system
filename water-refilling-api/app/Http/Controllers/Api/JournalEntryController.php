@@ -3,13 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Services\JournalEntryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class JournalEntryController extends Controller
@@ -33,17 +31,95 @@ class JournalEntryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'journal_number' => ['required', 'string', 'max:50', 'unique:journal_entries,journal_number'],
-            'journal_date' => ['required', 'date'],
-            'description' => ['required', 'string', 'max:255'],
-            'reference_type' => ['nullable', 'string', 'max:50'],
-            'reference_id' => ['nullable', 'integer', 'min:1'],
-            'lines' => ['required', 'array', 'min:2'],
-            'lines.*.account_id' => ['required', 'integer', 'exists:accounts,id'],
-            'lines.*.description' => ['nullable', 'string', 'max:255'],
-            'lines.*.debit_amount' => ['required', 'numeric', 'min:0'],
-            'lines.*.credit_amount' => ['required', 'numeric', 'min:0'],
+            'journal_number' => [
+                'required',
+                'string',
+                'max:50',
+                'unique:journal_entries,journal_number',
+            ],
+            'journal_date' => [
+                'required',
+                'date',
+            ],
+            'description' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+            'reference_type' => [
+                'nullable',
+                'string',
+                'max:50',
+            ],
+            'reference_id' => [
+                'nullable',
+                'integer',
+                'min:1',
+            ],
+            'lines' => [
+                'required',
+                'array',
+                'min:2',
+            ],
+            'lines.*.account_id' => [
+                'required',
+                'integer',
+                'exists:accounts,id',
+            ],
+            'lines.*.description' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'lines.*.debit_amount' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
+            'lines.*.credit_amount' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
         ]);
+
+        // Validate line structure and balance before saving.
+        $totalDebits = '0.00';
+        $totalCredits = '0.00';
+
+        foreach ($validated['lines'] as $index => $line) {
+            $debit = round((float) $line['debit_amount'], 2);
+            $credit = round((float) $line['credit_amount'], 2);
+
+            if (($debit > 0 && $credit > 0) ||
+                ($debit == 0 && $credit == 0)) {
+                throw ValidationException::withMessages([
+                    "lines.$index" =>
+                        'Each journal line must contain either a debit or a credit, not both or neither.',
+                ]);
+            }
+
+            $totalDebits = number_format(
+                (float) $totalDebits + $debit,
+                2,
+                '.',
+                ''
+            );
+
+            $totalCredits = number_format(
+                (float) $totalCredits + $credit,
+                2,
+                '.',
+                ''
+            );
+        }
+
+        if ($totalDebits !== $totalCredits) {
+            throw ValidationException::withMessages([
+                'lines' =>
+                    'Total debits must equal total credits before saving the journal entry.',
+            ]);
+        }
 
         $entry = DB::transaction(function () use ($validated, $request) {
             $entry = JournalEntry::create([
@@ -71,6 +147,8 @@ class JournalEntryController extends Controller
         JournalEntry $journalEntry,
         JournalEntryService $service
     ): JsonResponse {
+        // The service checks status, line structure, and balance
+        // inside its database transaction before posting.
         $service->post($journalEntry);
 
         return response()->json(

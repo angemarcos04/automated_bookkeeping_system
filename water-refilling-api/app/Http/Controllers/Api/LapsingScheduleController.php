@@ -52,13 +52,19 @@ class LapsingScheduleController extends Controller
                 break;
         }
 
-        // A lapsing schedule is a snapshot as of the selected period's
-        // ending date. It is not a sum of separate daily snapshots.
+        // The report is a snapshot as of the selected period's ending date.
         $asOf = $endDate->copy()->startOfDay();
 
-        $assets = FixedAsset::where('is_active', true)
-            ->orderBy('asset_code')
-            ->get()
+        $assets = FixedAsset::query()
+            ->where('is_active', true)
+                ->whereNotNull('acquisition_date')
+                    ->whereDate(
+        'acquisition_date',
+        '<=',
+        $asOf->toDateString()
+    )
+        ->orderBy('asset_code')
+        ->get()
             ->map(function (FixedAsset $asset) use ($asOf) {
                 $cost = (float) $asset->acquisition_cost;
                 $salvage = (float) $asset->salvage_value;
