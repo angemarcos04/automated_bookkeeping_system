@@ -8,7 +8,7 @@ Imports System.Windows.Forms
 Public Class LoginForm
     Inherits Form
 
-    Private Const ApiUrl As String = "http://127.0.0.1:8000/api/login"
+    Private Const ApiUrl As String = "https://automated-bookkeeping-system.onrender.com/api/login"
 
     Private ReadOnly emailInput As New TextBox()
     Private ReadOnly passwordInput As New TextBox()

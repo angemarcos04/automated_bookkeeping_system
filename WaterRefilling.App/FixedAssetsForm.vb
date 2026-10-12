@@ -519,7 +519,7 @@ Public Class FixedAssetsForm
             MessageBox.Show(
                 "Unable to load fixed assets." & Environment.NewLine &
                 ex.Message & Environment.NewLine & Environment.NewLine &
-                "Make sure the Laravel API is running at http://127.0.0.1:8000.",
+                "Check your internet connection and the deployed Laravel API on Render.",
                 "Aqua ARC",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error)
