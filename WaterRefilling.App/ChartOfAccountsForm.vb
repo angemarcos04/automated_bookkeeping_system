@@ -322,8 +322,7 @@ Public Class ChartOfAccountsForm
                 "Unable to load the chart of accounts." &
                 Environment.NewLine & Environment.NewLine &
                 ex.Message & Environment.NewLine & Environment.NewLine &
-                "Check that the Laravel API is running at " &
-                "http://127.0.0.1:8000.",
+                "Check your internet connection and the deployed Laravel API on Render.",
                 "Aqua ARC - API Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error)

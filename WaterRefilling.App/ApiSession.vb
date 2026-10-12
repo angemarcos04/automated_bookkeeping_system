@@ -1,12 +1,14 @@
 Imports System
 Imports System.Net.Http
+Imports System.Net.Http.Headers
 
 Public NotInheritable Class ApiSession
+
     Private Sub New()
     End Sub
 
     Public Shared ReadOnly Client As New HttpClient() With {
-        .BaseAddress = New Uri("http://127.0.0.1:8000/api/"),
+        .BaseAddress = New Uri("https://automated-bookkeeping-system.onrender.com/api/"),
         .Timeout = TimeSpan.FromSeconds(30)
     }
 
@@ -17,9 +19,7 @@ Public NotInheritable Class ApiSession
 
         If Not String.IsNullOrWhiteSpace(BearerToken) Then
             Client.DefaultRequestHeaders.Authorization =
-                New System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Bearer",
-                    BearerToken)
+                New AuthenticationHeaderValue("Bearer", BearerToken)
         End If
     End Sub
 
@@ -27,4 +27,5 @@ Public NotInheritable Class ApiSession
         BearerToken = Nothing
         ApplyAuthorization()
     End Sub
+
 End Class
