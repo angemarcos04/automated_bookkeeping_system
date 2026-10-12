@@ -1,7 +1,7 @@
 FROM php:8.3-apache
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git unzip curl libzip-dev libcurl4-openssl-dev libxml2-dev \
+  && apt-get install -y --no-install-recommends git unzip curl libzip-dev libcurl4-openssl-dev libxml2-dev libonig-dev \
     && docker-php-ext-install pdo_mysql mbstring bcmath exif pcntl zip curl dom xml \
     && rm -rf /var/lib/apt/lists/*
 
