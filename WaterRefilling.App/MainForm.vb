@@ -6,6 +6,7 @@ Imports System.Text.Json
 Imports System.Globalization
 Imports System.Threading.Tasks
 Imports System.Collections.Generic
+Imports System.Linq
 
 Public Class MainForm
     Inherits Form
@@ -337,9 +338,7 @@ Public Sub New()
         AddSidebarButton("Audit Trail")
         AddSidebarButton("Settings")
 
-        UpdateTransactionSubmenu()
-        UpdateFinancialReportsSubmenu()
-        UpdateSidebarButtonWidths()
+        ApplyRoleBasedMenuVisibility()
 
         AddHandler menuFlow.SizeChanged,
             Sub(sender, e)
@@ -394,50 +393,120 @@ Public Sub New()
         menuFlow.Controls.Add(button)
         sidebarMenuButtons.Add(button)
     End Sub
+    Private Function HasRole(roleName As String) As Boolean
+        If ApiSession.CurrentUserRoles Is Nothing Then
+            Return False
+        End If
 
-    Private Sub UpdateSidebarButtonWidths()
+        For Each role As String In ApiSession.CurrentUserRoles
+            If String.Equals(
+                If(role, "").Trim(),
+                roleName,
+                StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
+
+    Private Function IsMenuAllowed(menuName As String) As Boolean
+        If HasRole("Admin") Then Return True
+
+        Select Case menuName.Trim()
+            Case "Dashboard"
+                Return HasRole("Owner") OrElse HasRole("Staff")
+
+            Case "Master Data",
+                 "Fixed Assets",
+                 "Transactions",
+                 "Cash Receipts Book",
+                 "Cash Disbursements",
+                 "Journal Entries",
+                 "General Ledger",
+                 "Financial Reports",
+                 "Lapsing Schedule",
+                 "Trial Balance"
+
+                Return HasRole("Owner")
+
+            Case Else
+                Return False
+        End Select
+    End Function
+
+    Private Sub ApplyRoleBasedMenuVisibility()
         If menuFlow Is Nothing Then Return
 
-        Dim availableWidth As Integer =
-            Math.Max(150, menuFlow.ClientSize.Width -
-                        menuFlow.Padding.Horizontal - 5)
-
         For Each control As Control In menuFlow.Controls
-            control.Width = availableWidth
+            Dim button As Button = TryCast(control, Button)
+            If button Is Nothing Then Continue For
+
+            Dim menuName As String = button.Text.Trim()
+            menuName = menuName.Replace("  >", "")
+            menuName = menuName.Replace("  v", "")
+            menuName = menuName.Trim()
+
+            button.Visible = IsMenuAllowed(menuName)
         Next
+
+        UpdateTransactionSubmenu()
+        UpdateFinancialReportsSubmenu()
+        UpdateSidebarButtonWidths()
     End Sub
+        Private Sub UpdateSidebarButtonWidths()
+    If menuFlow Is Nothing Then Return
+
+    Dim availableWidth As Integer =
+        Math.Max(150, menuFlow.ClientSize.Width -
+                    menuFlow.Padding.Horizontal - 5)
+
+    For Each control As Control In menuFlow.Controls
+        control.Width = availableWidth
+    Next
+End Sub
 
     Private Sub UpdateTransactionSubmenu()
-        For Each button As Button In transactionMenuButtons
-            button.Visible = transactionsExpanded
-        Next
+    For Each button As Button In transactionMenuButtons
+        button.Visible =
+            transactionsExpanded AndAlso
+            IsMenuAllowed(button.Text.Trim())
+    Next
 
-        If transactionsButton IsNot Nothing Then
-            transactionsButton.Text =
-                If(transactionsExpanded,
-                   "Transactions  v",
-                   "Transactions  >")
-        End If
+    If transactionsButton IsNot Nothing Then
+        transactionsButton.Visible =
+            IsMenuAllowed("Transactions")
 
-        menuFlow.PerformLayout()
-        menuFlow.Invalidate()
-    End Sub
+        transactionsButton.Text =
+            If(transactionsExpanded,
+            "Transactions  v",
+            "Transactions  >")
+    End If
 
-    Private Sub UpdateFinancialReportsSubmenu()
-        For Each button As Button In financialReportMenuButtons
-            button.Visible = financialReportsExpanded
-        Next
+    menuFlow.PerformLayout()
+    menuFlow.Invalidate()
+End Sub
 
-        If financialReportsButton IsNot Nothing Then
-            financialReportsButton.Text =
-                If(financialReportsExpanded,
-                   "Financial Reports  v",
-                   "Financial Reports  >")
-        End If
+Private Sub UpdateFinancialReportsSubmenu()
+    For Each button As Button In financialReportMenuButtons
+        button.Visible =
+            financialReportsExpanded AndAlso
+            IsMenuAllowed(button.Text.Trim())
+    Next
 
-        menuFlow.PerformLayout()
-        menuFlow.Invalidate()
-    End Sub
+    If financialReportsButton IsNot Nothing Then
+        financialReportsButton.Visible =
+            IsMenuAllowed("Financial Reports")
+
+        financialReportsButton.Text =
+            If(financialReportsExpanded,
+            "Financial Reports  v",
+            "Financial Reports  >")
+    End If
+
+    menuFlow.PerformLayout()
+    menuFlow.Invalidate()
+End Sub
 
     Private Sub OpenCashReceipts()
         pageTitle.Text = "Cash Receipts Book"
