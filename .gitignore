@@ -24,3 +24,6 @@
 # IDE and operating system files
 .DS_Store
 Thumbs.db
+
+# Local TiDB certificates
+/water-refilling-api/certs/

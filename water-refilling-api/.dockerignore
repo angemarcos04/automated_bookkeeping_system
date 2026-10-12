@@ -10,3 +10,5 @@ node_modules
 database/*.sqlite
 database/*.sqlite-*
 storage/logs/*
+
+certs/

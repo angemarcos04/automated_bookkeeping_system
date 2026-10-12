@@ -7,6 +7,10 @@ RUN apt-get update \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+RUN mkdir -p /etc/ssl/tidb \
+    && curl -fsSL https://letsencrypt.org/certs/isrgrootx1.pem \
+       -o /etc/ssl/tidb/isrgrootx1.pem
+
 WORKDIR /var/www/html
 
 COPY . .
@@ -20,3 +24,4 @@ RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoload
 EXPOSE 10000
 
 CMD ["bash", "-lc", "sed -i \"s/Listen 80/Listen ${PORT:-10000}/\" /etc/apache2/ports.conf && sed -i \"s/:80>/:${PORT:-10000}>/\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
+
