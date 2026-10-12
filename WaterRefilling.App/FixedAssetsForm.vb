@@ -11,17 +11,10 @@ Imports System.Windows.Forms
 Public Class FixedAssetsForm
     Inherits Form
 
-    Private Shared ReadOnly pageBackground As Color =
-        Color.FromArgb(243, 248, 244)
-
-    Private Shared ReadOnly deepGreen As Color =
-        Color.FromArgb(30, 76, 49)
-
-    Private Shared ReadOnly primaryGreen As Color =
-        Color.FromArgb(46, 125, 72)
-
-    Private Shared ReadOnly textColor As Color =
-        Color.FromArgb(40, 55, 45)
+    Private ReadOnly primaryGreen As Color = Color.FromArgb(46, 157, 88)
+    Private ReadOnly deepGreen As Color = Color.FromArgb(23, 107, 58)
+    Private ReadOnly pageBackground As Color = Color.FromArgb(245, 250, 245)
+    Private ReadOnly textColor As Color = Color.FromArgb(32, 51, 40)
 
     Private ReadOnly assetCodeInput As New TextBox()
     Private ReadOnly nameInput As New TextBox()
@@ -36,11 +29,9 @@ Public Class FixedAssetsForm
     Private ReadOnly activeInput As New CheckBox()
 
     Private ReadOnly assetsGrid As New DataGridView()
-    Private ReadOnly statusLabel As New Label()
-
-    Private ReadOnly searchInput As New TextBox()
-    Private ReadOnly searchButton As New Button()
+    Private ReadOnly assetSearchInput As New TextBox()
     Private ReadOnly clearSearchButton As New Button()
+    Private ReadOnly statusLabel As New Label()
 
     Private ReadOnly saveButton As New Button()
     Private ReadOnly updateButton As New Button()
@@ -54,13 +45,19 @@ Public Class FixedAssetsForm
     Private isDeleting As Boolean = False
 
     Private ReadOnly assetCategories As String() = {
-        "Land",
+        "Water Purification Equipment",
+        "Water Storage Equipment",
+        "Water Pumps",
+        "Water Treatment Equipment",
+        "Filling Equipment",
+        "Plumbing and Piping",
+        "Electrical Equipment",
+        "Computers and IT Equipment",
+        "Office Equipment",
+        "Furniture and Fixtures",
+        "Vehicles",
         "Buildings and Improvements",
         "Leasehold Improvements",
-        "Furniture and Fixtures",
-        "Office Equipment",
-        "Computer Equipment",
-        "Vehicles",
         "Tools and Maintenance Equipment",
         "Safety and Security Equipment",
         "Laboratory and Testing Equipment",
@@ -102,6 +99,7 @@ Public Class FixedAssetsForm
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 58))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 42))
 
+        ' Heading
         Dim heading As New Panel With {
             .Dock = DockStyle.Fill,
             .BackColor = pageBackground
@@ -127,6 +125,7 @@ Public Class FixedAssetsForm
         heading.Controls.Add(subtitle)
         root.Controls.Add(heading, 0, 0)
 
+        ' Asset editor
         Dim editorCard As New Panel With {
             .Dock = DockStyle.Fill,
             .BackColor = Color.White,
@@ -212,6 +211,7 @@ Public Class FixedAssetsForm
         editorCard.Controls.Add(editorLayout)
         root.Controls.Add(editorCard, 0, 1)
 
+        ' Registered assets panel
         Dim listCard As New Panel With {
             .Dock = DockStyle.Fill,
             .BackColor = Color.White,
@@ -227,8 +227,8 @@ Public Class FixedAssetsForm
             .BackColor = Color.White
         }
 
-        listLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
-        listLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 44))
+        listLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 38))
+        listLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 42))
         listLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         listLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 46))
 
@@ -240,29 +240,46 @@ Public Class FixedAssetsForm
             .TextAlign = ContentAlignment.MiddleLeft
         }
 
-        ConfigureSearchControls()
-        ConfigureGrid()
-
+        ' Search bar
         Dim searchPanel As New TableLayoutPanel With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 3,
+            .ColumnCount = 2,
             .RowCount = 1,
             .BackColor = Color.White,
-            .Margin = New Padding(0, 0, 0, 5)
+            .Margin = New Padding(0, 0, 0, 4)
         }
 
-        searchPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        searchPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 90))
-        searchPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
+        searchPanel.ColumnStyles.Add(
+            New ColumnStyle(SizeType.Percent, 100))
 
-        searchPanel.Controls.Add(searchInput, 0, 0)
-        searchPanel.Controls.Add(searchButton, 1, 0)
-        searchPanel.Controls.Add(clearSearchButton, 2, 0)
+        searchPanel.ColumnStyles.Add(
+            New ColumnStyle(SizeType.Absolute, 115))
+
+        assetSearchInput.Dock = DockStyle.Fill
+        assetSearchInput.Font = New Font("Segoe UI", 9.5F)
+        assetSearchInput.Margin = New Padding(0, 5, 8, 5)
+        assetSearchInput.PlaceholderText =
+            "Search asset code, name, or category..."
+
+        clearSearchButton.Text = "Clear Search"
+        clearSearchButton.Dock = DockStyle.Fill
+        clearSearchButton.Margin = New Padding(0, 4, 0, 4)
+        clearSearchButton.BackColor = Color.FromArgb(100, 116, 106)
+        clearSearchButton.ForeColor = Color.White
+        clearSearchButton.FlatStyle = FlatStyle.Flat
+        clearSearchButton.FlatAppearance.BorderSize = 0
+        clearSearchButton.Cursor = Cursors.Hand
+
+        searchPanel.Controls.Add(assetSearchInput, 0, 0)
+        searchPanel.Controls.Add(clearSearchButton, 1, 0)
+
+        ConfigureGrid()
 
         listLayout.Controls.Add(listTitle, 0, 0)
         listLayout.Controls.Add(searchPanel, 0, 1)
         listLayout.Controls.Add(assetsGrid, 0, 2)
 
+        ' Status and action buttons
         Dim bottomPanel As New TableLayoutPanel With {
             .Dock = DockStyle.Fill,
             .ColumnCount = 2,
@@ -314,34 +331,19 @@ Public Class FixedAssetsForm
 
         Me.Controls.Add(root)
 
+        ' Event handlers
         AddHandler saveButton.Click, AddressOf SaveButton_Click
         AddHandler updateButton.Click, AddressOf UpdateButton_Click
         AddHandler deleteButton.Click, AddressOf DeleteButton_Click
         AddHandler clearButton.Click, AddressOf ClearButton_Click
         AddHandler refreshButton.Click, AddressOf RefreshButton_Click
-        AddHandler searchButton.Click, AddressOf SearchButton_Click
-        AddHandler clearSearchButton.Click, AddressOf ClearSearchButton_Click
-        AddHandler searchInput.KeyDown, AddressOf SearchInput_KeyDown
-
         AddHandler assetsGrid.CellDoubleClick, AddressOf AssetsGrid_CellDoubleClick
         AddHandler assetsGrid.SelectionChanged, AddressOf AssetsGrid_SelectionChanged
+        AddHandler assetSearchInput.TextChanged, AddressOf AssetSearchInput_TextChanged
+        AddHandler clearSearchButton.Click, AddressOf ClearSearchButton_Click
 
         updateButton.Enabled = False
         deleteButton.Enabled = False
-    End Sub
-
-    Private Sub ConfigureSearchControls()
-        searchInput.Dock = DockStyle.Fill
-        searchInput.Font = New Font("Segoe UI", 10.0F)
-        searchInput.Margin = New Padding(3, 5, 8, 5)
-
-        ConfigureButton(searchButton, "Search", primaryGreen)
-        searchButton.Dock = DockStyle.Fill
-        searchButton.Margin = New Padding(2, 3, 5, 3)
-
-        ConfigureButton(clearSearchButton, "Clear Search", Color.FromArgb(100, 116, 106))
-        clearSearchButton.Dock = DockStyle.Fill
-        clearSearchButton.Margin = New Padding(2, 3, 3, 3)
     End Sub
 
     Private Sub ConfigureTextBox(box As TextBox)
@@ -433,22 +435,13 @@ Public Class FixedAssetsForm
 
         isLoading = True
         refreshButton.Enabled = False
-        searchButton.Enabled = False
-        clearSearchButton.Enabled = False
         statusLabel.Text = "Loading assets..."
 
         Try
             ApiSession.ApplyAuthorization()
 
-            Dim endpoint As String = "fixed-assets"
-            Dim searchTerm As String = searchInput.Text.Trim()
-
-            If searchTerm.Length > 0 Then
-                endpoint &= "?search=" & Uri.EscapeDataString(searchTerm)
-            End If
-
             Using response As HttpResponseMessage =
-                Await ApiSession.Client.GetAsync(endpoint)
+                Await ApiSession.Client.GetAsync("fixed-assets")
 
                 Dim json As String =
                     Await response.Content.ReadAsStringAsync()
@@ -459,13 +452,15 @@ Public Class FixedAssetsForm
                 End If
 
                 Using doc As JsonDocument = JsonDocument.Parse(json)
-                    Dim responseRoot As JsonElement = doc.RootElement
-                    Dim data As JsonElement = responseRoot
-                    Dim nested As JsonElement
+                    Dim root As JsonElement = doc.RootElement
+                    Dim data As JsonElement = root
 
-                    If responseRoot.ValueKind = JsonValueKind.Object AndAlso
-                       responseRoot.TryGetProperty("data", nested) Then
-                        data = nested
+                    If root.ValueKind = JsonValueKind.Object Then
+                        Dim nested As JsonElement
+
+                        If root.TryGetProperty("data", nested) Then
+                            data = nested
+                        End If
                     End If
 
                     If data.ValueKind <> JsonValueKind.Array Then
@@ -474,15 +469,16 @@ Public Class FixedAssetsForm
                     End If
 
                     assetsGrid.Rows.Clear()
-                    selectedAssetId = Nothing
 
                     For Each asset As JsonElement In data.EnumerateArray()
                         Dim id As String = JsonText(asset, "id")
                         Dim code As String = JsonText(asset, "asset_code")
                         Dim assetName As String = JsonText(asset, "name")
                         Dim category As String = JsonText(asset, "category")
-                        Dim cost As Decimal = JsonDecimal(asset, "acquisition_cost")
-                        Dim active As Boolean = JsonBoolean(asset, "is_active")
+                        Dim cost As Decimal =
+                            JsonDecimal(asset, "acquisition_cost")
+                        Dim active As Boolean =
+                            JsonBoolean(asset, "is_active")
 
                         Dim rowIndex As Integer = assetsGrid.Rows.Add(
                             id,
@@ -500,18 +496,11 @@ Public Class FixedAssetsForm
                 End Using
             End Using
 
-            assetsGrid.ClearSelection()
-            UpdateSelectionButtons()
+            ApplyAssetSearch()
 
-            If searchTerm.Length > 0 Then
-                statusLabel.Text = "Found " &
-                    assetsGrid.Rows.Count.ToString() &
-                    " matching asset(s)."
-            Else
-                statusLabel.Text = "Loaded " &
-                    assetsGrid.Rows.Count.ToString() &
-                    " asset(s)."
-            End If
+            statusLabel.Text =
+                "Showing " & CountVisibleAssets().ToString() &
+                " of " & assetsGrid.Rows.Count.ToString() & " asset(s)."
 
         Catch ex As Exception
             statusLabel.Text = "Unable to load assets."
@@ -519,39 +508,82 @@ Public Class FixedAssetsForm
             MessageBox.Show(
                 "Unable to load fixed assets." & Environment.NewLine &
                 ex.Message & Environment.NewLine & Environment.NewLine &
-                "Check your internet connection and the deployed Laravel API on Render.",
+                "Check your connection and the Laravel API.",
                 "Aqua ARC",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error)
         Finally
             isLoading = False
             refreshButton.Enabled = True
-            searchButton.Enabled = True
-            clearSearchButton.Enabled = True
             UpdateSelectionButtons()
         End Try
     End Function
 
-    Private Async Sub SearchButton_Click(sender As Object, e As EventArgs)
-        Await LoadAssetsAsync()
-    End Sub
-
-    Private Async Sub SearchInput_KeyDown(
-        sender As Object,
-        e As KeyEventArgs)
-
-        If e.KeyCode <> Keys.Enter Then Return
-
-        e.SuppressKeyPress = True
-        Await LoadAssetsAsync()
-    End Sub
-
-    Private Async Sub ClearSearchButton_Click(
+    Private Sub AssetSearchInput_TextChanged(
         sender As Object,
         e As EventArgs)
 
-        searchInput.Clear()
-        Await LoadAssetsAsync()
+        ApplyAssetSearch()
+
+        If Not isLoading Then
+            statusLabel.Text =
+                "Showing " & CountVisibleAssets().ToString() &
+                " of " & assetsGrid.Rows.Count.ToString() & " asset(s)."
+        End If
+    End Sub
+
+    Private Sub ApplyAssetSearch()
+        Dim query As String = assetSearchInput.Text.Trim()
+
+        assetsGrid.SuspendLayout()
+
+        Try
+            For Each row As DataGridViewRow In assetsGrid.Rows
+                If row.IsNewRow Then Continue For
+
+                Dim assetCode As String =
+                    Convert.ToString(row.Cells("asset_code").Value)
+
+                Dim assetName As String =
+                    Convert.ToString(row.Cells("name").Value)
+
+                Dim category As String =
+                    Convert.ToString(row.Cells("category").Value)
+
+                Dim matches As Boolean =
+                    String.IsNullOrWhiteSpace(query) OrElse
+                    assetCode.IndexOf(
+                        query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+                    assetName.IndexOf(
+                        query, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+                    category.IndexOf(
+                        query, StringComparison.OrdinalIgnoreCase) >= 0
+
+                row.Visible = matches
+            Next
+        Finally
+            assetsGrid.ResumeLayout()
+        End Try
+    End Sub
+
+    Private Function CountVisibleAssets() As Integer
+        Dim count As Integer = 0
+
+        For Each row As DataGridViewRow In assetsGrid.Rows
+            If Not row.IsNewRow AndAlso row.Visible Then
+                count += 1
+            End If
+        Next
+
+        Return count
+    End Function
+
+    Private Sub ClearSearchButton_Click(
+        sender As Object,
+        e As EventArgs)
+
+        assetSearchInput.Clear()
+        ApplyAssetSearch()
     End Sub
 
     Private Async Sub SaveButton_Click(sender As Object, e As EventArgs)
@@ -563,7 +595,7 @@ Public Class FixedAssetsForm
     End Sub
 
     Private Async Function SaveAssetAsync(isUpdate As Boolean) As Task
-        If isSaving OrElse isDeleting OrElse isLoading Then Return
+        If isSaving OrElse isDeleting Then Return
 
         Dim cost As Decimal
         Dim usefulLife As Decimal
@@ -646,12 +678,11 @@ Public Class FixedAssetsForm
         isSaving = True
         SetEditorEnabled(False)
         refreshButton.Enabled = False
-        searchButton.Enabled = False
-        clearSearchButton.Enabled = False
         deleteButton.Enabled = False
 
         Try
-            statusLabel.Text = If(isUpdate, "Updating asset...", "Saving asset...")
+            statusLabel.Text =
+                If(isUpdate, "Updating asset...", "Saving asset...")
 
             Dim json As String = JsonSerializer.Serialize(payload)
 
@@ -710,8 +741,6 @@ Public Class FixedAssetsForm
             isSaving = False
             SetEditorEnabled(True)
             refreshButton.Enabled = True
-            searchButton.Enabled = True
-            clearSearchButton.Enabled = True
         End Try
 
         Await LoadAssetsAsync()
@@ -725,7 +754,7 @@ Public Class FixedAssetsForm
         If isDeleting OrElse isSaving OrElse isLoading Then Return
 
         If Not selectedAssetId.HasValue Then
-            ShowValidation("Double-click an asset in the list first.")
+            ShowValidation("Select an asset from the list first.")
             Return
         End If
 
@@ -767,8 +796,6 @@ Public Class FixedAssetsForm
         isDeleting = True
         SetEditorEnabled(False)
         refreshButton.Enabled = False
-        searchButton.Enabled = False
-        clearSearchButton.Enabled = False
         deleteButton.Enabled = False
         statusLabel.Text = "Deactivating asset..."
 
@@ -818,8 +845,6 @@ Public Class FixedAssetsForm
             isDeleting = False
             SetEditorEnabled(True)
             refreshButton.Enabled = True
-            searchButton.Enabled = True
-            clearSearchButton.Enabled = True
         End Try
 
         Await LoadAssetsAsync()
@@ -829,7 +854,7 @@ Public Class FixedAssetsForm
         sender As Object,
         e As DataGridViewCellEventArgs)
 
-        If e.RowIndex < 0 OrElse isSaving OrElse isDeleting OrElse isLoading Then Return
+        If e.RowIndex < 0 OrElse isSaving OrElse isDeleting Then Return
 
         Dim idText As String =
             Convert.ToString(assetsGrid.Rows(e.RowIndex).Cells("id").Value)
@@ -842,7 +867,7 @@ Public Class FixedAssetsForm
     End Sub
 
     Private Async Function LoadSelectedAssetAsync(assetId As Integer) As Task
-        If isSaving OrElse isDeleting OrElse isLoading Then Return
+        If isSaving OrElse isDeleting Then Return
 
         Try
             statusLabel.Text = "Loading selected asset..."
@@ -938,8 +963,6 @@ Public Class FixedAssetsForm
             End Using
 
         Catch ex As Exception
-            selectedAssetId = Nothing
-
             MessageBox.Show(
                 "Unable to load the selected asset." &
                 Environment.NewLine & ex.Message,
@@ -955,8 +978,7 @@ Public Class FixedAssetsForm
     Private Sub AssetsGrid_SelectionChanged(sender As Object, e As EventArgs)
         If isLoading OrElse isSaving OrElse isDeleting Then Return
 
-        ' A single click selects a row but does not load it for editing.
-        ' Double-clicking is required to establish the editable asset ID.
+        ' Require double-clicking an asset to load it for editing.
         If assetsGrid.SelectedRows.Count = 0 Then
             selectedAssetId = Nothing
         Else
@@ -966,8 +988,8 @@ Public Class FixedAssetsForm
                 Convert.ToString(row.Cells("id").Value)
 
             If Not Integer.TryParse(rowIdText, rowId) OrElse
-               Not selectedAssetId.HasValue OrElse
-               selectedAssetId.Value <> rowId Then
+            Not selectedAssetId.HasValue OrElse
+            selectedAssetId.Value <> rowId Then
                 selectedAssetId = Nothing
             End If
         End If
@@ -976,14 +998,38 @@ Public Class FixedAssetsForm
     End Sub
 
     Private Sub UpdateSelectionButtons()
-        Dim canEdit As Boolean =
-            selectedAssetId.HasValue AndAlso
-            Not isDeleting AndAlso
-            Not isSaving AndAlso
-            Not isLoading
+        Dim hasSelectedGridRow As Boolean =
+            assetsGrid.SelectedRows.Count > 0
 
-        updateButton.Enabled = canEdit
-        deleteButton.Enabled = canEdit
+        If Not hasSelectedGridRow Then
+            deleteButton.Enabled = selectedAssetId.HasValue AndAlso
+                                   Not isDeleting AndAlso
+                                   Not isSaving AndAlso
+                                   Not isLoading
+
+            updateButton.Enabled = selectedAssetId.HasValue AndAlso
+                                   Not isDeleting AndAlso
+                                   Not isSaving AndAlso
+                                   Not isLoading
+            Return
+        End If
+
+        Dim row As DataGridViewRow = assetsGrid.SelectedRows(0)
+        Dim rowId As Integer
+        Dim rowIdText As String =
+            Convert.ToString(row.Cells("id").Value)
+
+        Dim validRow As Boolean = Integer.TryParse(rowIdText, rowId)
+
+        deleteButton.Enabled = validRow AndAlso
+                               Not isDeleting AndAlso
+                               Not isSaving AndAlso
+                               Not isLoading
+
+        updateButton.Enabled = selectedAssetId.HasValue AndAlso
+                               Not isDeleting AndAlso
+                               Not isSaving AndAlso
+                               Not isLoading
     End Sub
 
     Private Sub ClearButton_Click(sender As Object, e As EventArgs)
@@ -1034,8 +1080,8 @@ Public Class FixedAssetsForm
 
         saveButton.Enabled = enabled
         clearButton.Enabled = enabled
-
-        UpdateSelectionButtons()
+        updateButton.Enabled = enabled AndAlso selectedAssetId.HasValue
+        deleteButton.Enabled = enabled AndAlso selectedAssetId.HasValue
     End Sub
 
     Private Sub ShowValidation(message As String)
@@ -1129,7 +1175,7 @@ Public Class FixedAssetsForm
         Dim value As JsonElement
 
         If element.ValueKind <> JsonValueKind.Object OrElse
-           Not element.TryGetProperty(propertyName, value) Then
+        Not element.TryGetProperty(propertyName, value) Then
             Return False
         End If
 

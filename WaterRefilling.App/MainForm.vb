@@ -20,6 +20,15 @@ Public Class MainForm
     Private workspace As Panel
     Private pageTitle As Label
 
+    ' Notification controls
+    Private notificationButton As Panel
+    Private notificationBadge As Label
+    Private notificationPanel As Panel
+    Private notificationMessage As Label
+    Private notificationToolTip As ToolTip
+    Private notificationUnread As Boolean = True
+    Private notificationMessageText As String = ""
+
     Private transactionsExpanded As Boolean = False
     Private financialReportsExpanded As Boolean = False
 
@@ -31,8 +40,43 @@ Public Class MainForm
     Private ReadOnly sidebarMenuButtons As New List(Of Button)
     Private ReadOnly summaryValues As New Dictionary(Of String, Label)()
 
-    Public Sub New()
+    Private notificationClickFilter As NotificationOutsideClickFilter
+
+    Private Class NotificationOutsideClickFilter
+        Implements IMessageFilter
+
+        Private ReadOnly owner As MainForm
+
+        Public Sub New(form As MainForm)
+            owner = form
+        End Sub
+
+        Public Function PreFilterMessage(ByRef m As Message) As Boolean _
+            Implements IMessageFilter.PreFilterMessage
+
+            If m.Msg <> &H201 OrElse owner.IsDisposed Then
+                Return False
+            End If
+
+            If owner.NotificationPanelIsVisible() Then
+                Dim screenPoint As Point = Cursor.Position
+
+                If Not owner.NotificationBellScreenRectangle().Contains(screenPoint) AndAlso
+                Not owner.NotificationPanelScreenRectangle().Contains(screenPoint) Then
+
+                    owner.CloseNotificationPanel()
+                End If
+            End If
+
+            Return False
+        End Function
+    End Class
+
+Public Sub New()
         InitializeDashboard()
+
+        AddHandler AppNotifications.NotificationAdded,
+            AddressOf HandleAppNotification
     End Sub
 
     Private Sub InitializeDashboard()
@@ -46,10 +90,25 @@ Public Class MainForm
         BuildSidebar()
         BuildHeader()
         BuildDashboard()
+        SetLoginNotification()
+
+        notificationClickFilter = New NotificationOutsideClickFilter(Me)
+        Application.AddMessageFilter(notificationClickFilter)
 
         AddHandler Me.Shown,
             Async Sub(sender, e)
                 Await LoadDashboardAsync()
+            End Sub
+
+        AddHandler Me.FormClosed,
+            Sub(sender, e)
+                If notificationClickFilter IsNot Nothing Then
+                    Application.RemoveMessageFilter(notificationClickFilter)
+                End If
+
+                If notificationToolTip IsNot Nothing Then
+                    notificationToolTip.Dispose()
+                End If
             End Sub
     End Sub
 
@@ -131,25 +190,60 @@ Public Class MainForm
 
         Dim userPanel As New Panel With {
             .Dock = DockStyle.Bottom,
-            .Height = 65,
+            .Height = 100,
             .BackColor = Color.FromArgb(245, 250, 245)
         }
 
         sidebar.Controls.Add(userPanel)
         userPanel.BringToFront()
 
+         Dim logoutButton As New Button With {
+            .Text = "Log Out",
+            .Location = New Point(12, 62),
+            .Size = New Size(215, 30),
+            .Anchor = AnchorStyles.Left Or AnchorStyles.Right Or AnchorStyles.Top,
+            .BackColor = Color.FromArgb(253, 237, 237),
+            .ForeColor = Color.Firebrick,
+            .FlatStyle = FlatStyle.Flat,
+            .Font = New Font("Segoe UI", 9, FontStyle.Bold),
+            .Cursor = Cursors.Hand
+        }
+
+        logoutButton.FlatAppearance.BorderSize = 0
+
+        AddHandler logoutButton.Click,
+            AddressOf LogoutButton_Click
+
+        userPanel.Height = 100
+        userPanel.Controls.Add(logoutButton)
+        logoutButton.BringToFront()
+
+        Dim displayName As String = "Signed-in User"
+        Dim displayRole As String = "Authorized User"
+
+        If Not String.IsNullOrWhiteSpace(ApiSession.CurrentUserName) Then
+            displayName = ApiSession.CurrentUserName
+        End If
+
+        If ApiSession.CurrentUserRoles IsNot Nothing AndAlso
+           ApiSession.CurrentUserRoles.Count > 0 Then
+
+            displayRole = GetDisplayRole(ApiSession.CurrentUserRoles)
+        End If
+
         Dim userName As New Label With {
-            .Text = "Administrator",
+            .Text = displayName,
             .Font = New Font("Segoe UI", 10, FontStyle.Bold),
             .ForeColor = textColor,
             .Location = New Point(12, 8),
-            .AutoSize = True
+            .AutoSize = True,
+            .MaximumSize = New Size(220, 22)
         }
 
         userPanel.Controls.Add(userName)
 
         Dim userRole As New Label With {
-            .Text = "System User",
+            .Text = displayRole,
             .Font = New Font("Segoe UI", 8),
             .ForeColor = Color.Gray,
             .Location = New Point(12, 32),
@@ -164,7 +258,6 @@ Public Class MainForm
         AddSidebarButton("Master Data")
         AddSidebarButton("Fixed Assets")
 
-        ' Transactions dropdown.
         transactionsButton = CreateSidebarButton(
             "Transactions  >", False)
 
@@ -202,7 +295,6 @@ Public Class MainForm
         AddSidebarButton("Journal Entries")
         AddSidebarButton("General Ledger")
 
-        ' Financial Reports dropdown.
         financialReportsButton = CreateSidebarButton(
             "Financial Reports  >", False)
 
@@ -364,7 +456,7 @@ Public Class MainForm
     End Sub
 
     ' =========================================================
-    ' HEADER AND DASHBOARD
+    ' HEADER AND NOTIFICATIONS
     ' =========================================================
 
     Private Sub BuildHeader()
@@ -403,12 +495,309 @@ Public Class MainForm
         MakeRounded(period, 10)
         header.Controls.Add(period)
 
+        notificationToolTip = New ToolTip With {
+            .InitialDelay = 350,
+            .ReshowDelay = 100,
+            .AutoPopDelay = 4000,
+            .ShowAlways = True
+        }
+
+        notificationButton = New Panel With {
+            .Size = New Size(42, 38),
+            .BackColor = Color.White,
+            .Cursor = Cursors.Hand,
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Right,
+            .Location = New Point(period.Left - 55, 17),
+            .AccessibleName = "Notifications"
+        }
+
+        AddHandler notificationButton.Paint,
+            Sub(sender, e)
+                DrawBellIcon(e.Graphics, notificationButton.ClientRectangle)
+            End Sub
+
+        AddHandler notificationButton.MouseEnter,
+            Sub(sender, e)
+                notificationButton.BackColor =
+                    Color.FromArgb(238, 248, 240)
+                notificationButton.Invalidate()
+            End Sub
+
+        AddHandler notificationButton.MouseLeave,
+            Sub(sender, e)
+                notificationButton.BackColor = Color.White
+                notificationButton.Invalidate()
+            End Sub
+
+        AddHandler notificationButton.Click,
+            Sub(sender, e)
+                ToggleNotificationPanel()
+            End Sub
+
+        notificationToolTip.SetToolTip(
+            notificationButton,
+            "View notifications")
+
+        header.Controls.Add(notificationButton)
+
+        notificationBadge = New Label With {
+            .Text = "1",
+            .Size = New Size(18, 18),
+            .Location = New Point(27, 0),
+            .BackColor = Color.FromArgb(210, 55, 55),
+            .ForeColor = Color.White,
+            .Font = New Font("Segoe UI", 8, FontStyle.Bold),
+            .TextAlign = ContentAlignment.MiddleCenter
+        }
+
+        MakeRounded(notificationBadge, 9)
+        notificationButton.Controls.Add(notificationBadge)
+        notificationBadge.BringToFront()
+
+        notificationPanel = New Panel With {
+            .Size = New Size(330, 155),
+            .BackColor = Color.White,
+            .BorderStyle = BorderStyle.FixedSingle,
+            .Visible = False
+        }
+
+        Dim notificationHeading As New Label With {
+            .Text = "Notifications",
+            .Font = New Font("Segoe UI", 12, FontStyle.Bold),
+            .ForeColor = deepGreen,
+            .Location = New Point(15, 12),
+            .AutoSize = True
+        }
+
+        notificationPanel.Controls.Add(notificationHeading)
+
+        notificationMessage = New Label With {
+            .Location = New Point(15, 45),
+            .Size = New Size(295, 60),
+            .Font = New Font("Segoe UI", 9),
+            .ForeColor = textColor,
+            .TextAlign = ContentAlignment.TopLeft
+        }
+
+        notificationPanel.Controls.Add(notificationMessage)
+
+        Dim markReadButton As New Button With {
+            .Text = "Mark as read",
+            .Size = New Size(100, 30),
+            .Location = New Point(205, 112),
+            .BackColor = Color.FromArgb(238, 248, 240),
+            .ForeColor = deepGreen,
+            .FlatStyle = FlatStyle.Flat,
+            .Cursor = Cursors.Hand
+        }
+
+        markReadButton.FlatAppearance.BorderSize = 0
+        notificationPanel.Controls.Add(markReadButton)
+
+        AddHandler markReadButton.Click,
+            Sub(sender, e)
+                notificationUnread = False
+                UpdateNotificationBadge()
+                CloseNotificationPanel()
+            End Sub
+
+        Controls.Add(notificationPanel)
+        notificationPanel.BringToFront()
+
         AddHandler header.Resize,
             Sub(sender, e)
                 period.Left = header.ClientSize.Width -
                               period.Width - 25
+
+                notificationButton.Left = period.Left - 55
             End Sub
     End Sub
+
+    Private Sub DrawBellIcon(
+        graphics As Graphics,
+        bounds As Rectangle)
+
+        graphics.SmoothingMode = SmoothingMode.AntiAlias
+
+        Using bellPen As New Pen(deepGreen, 2.2F)
+            bellPen.StartCap = LineCap.Round
+            bellPen.EndCap = LineCap.Round
+
+            Dim centerX As Single = bounds.Width / 2.0F
+            Dim topY As Single = 7.0F
+
+            Using bellPath As New GraphicsPath()
+                bellPath.AddArc(
+                    centerX - 8,
+                    topY,
+                    16,
+                    19,
+                    180,
+                    180)
+
+                bellPath.AddLine(
+                    centerX + 8,
+                    topY + 9,
+                    centerX + 8,
+                    topY + 19)
+
+                bellPath.AddLine(
+                    centerX + 8,
+                    topY + 19,
+                    centerX + 11,
+                    topY + 22)
+
+                bellPath.AddLine(
+                    centerX + 11,
+                    topY + 22,
+                    centerX - 11,
+                    topY + 22)
+
+                bellPath.AddLine(
+                    centerX - 11,
+                    topY + 22,
+                    centerX - 8,
+                    topY + 19)
+
+                bellPath.AddLine(
+                    centerX - 8,
+                    topY + 19,
+                    centerX - 8,
+                    topY + 9)
+
+                graphics.DrawPath(bellPen, bellPath)
+            End Using
+
+            graphics.DrawArc(
+                bellPen,
+                centerX - 4,
+                topY + 18,
+                8,
+                6,
+                0,
+                180)
+
+            graphics.DrawLine(
+                bellPen,
+                centerX - 3,
+                topY + 27,
+                centerX + 3,
+                topY + 27)
+        End Using
+    End Sub
+
+    Private Sub SetLoginNotification()
+        Dim roleLabel As String = "Authorized User"
+
+        If ApiSession.CurrentUserRoles IsNot Nothing AndAlso
+           ApiSession.CurrentUserRoles.Count > 0 Then
+
+            roleLabel = GetDisplayRole(ApiSession.CurrentUserRoles)
+        End If
+
+        notificationMessageText =
+            "You have successfully signed in as " &
+            roleLabel & "."
+
+        If notificationMessage IsNot Nothing Then
+            notificationMessage.Text = notificationMessageText
+        End If
+
+        notificationUnread = True
+        UpdateNotificationBadge()
+    End Sub
+
+    Private Function GetDisplayRole(roles As List(Of String)) As String
+        If roles Is Nothing OrElse roles.Count = 0 Then
+            Return "Authorized User"
+        End If
+
+        Dim actualRole As String = roles(0).Trim()
+
+        Select Case actualRole.ToLowerInvariant()
+            Case "admin"
+                Return "Administrator"
+            Case "owner"
+                Return "Owner"
+            Case "staff"
+                Return "Staff"
+            Case Else
+                Return actualRole
+        End Select
+    End Function
+
+    Private Sub ToggleNotificationPanel()
+        If notificationPanel Is Nothing OrElse
+           notificationButton Is Nothing Then
+            Return
+        End If
+
+        If notificationPanel.Visible Then
+            CloseNotificationPanel()
+            Return
+        End If
+
+        notificationMessage.Text = notificationMessageText
+
+        Dim screenLocation As Point =
+            notificationButton.PointToScreen(
+                New Point(0, notificationButton.Height))
+
+        notificationPanel.Location = PointToClient(screenLocation)
+
+        notificationPanel.Left = Math.Max(
+            10,
+            Math.Min(
+                notificationPanel.Left,
+                ClientSize.Width - notificationPanel.Width - 10))
+
+        notificationPanel.Top = Math.Max(75, notificationPanel.Top)
+
+        notificationPanel.Visible = True
+        notificationPanel.BringToFront()
+    End Sub
+
+    Private Sub UpdateNotificationBadge()
+        If notificationBadge Is Nothing Then Return
+
+        notificationBadge.Visible = notificationUnread
+        notificationBadge.Text = If(notificationUnread, "1", "")
+    End Sub
+
+    Private Sub CloseNotificationPanel()
+        If notificationPanel IsNot Nothing Then
+            notificationPanel.Visible = False
+        End If
+    End Sub
+
+    Private Function NotificationPanelIsVisible() As Boolean
+        Return notificationPanel IsNot Nothing AndAlso
+               notificationPanel.Visible
+    End Function
+
+    Private Function NotificationBellScreenRectangle() As Rectangle
+        If notificationButton Is Nothing Then Return Rectangle.Empty
+
+        Return notificationButton.RectangleToScreen(
+            notificationButton.ClientRectangle)
+    End Function
+
+    Private Function NotificationPanelScreenRectangle() As Rectangle
+        If notificationPanel Is Nothing Then Return Rectangle.Empty
+
+        Return notificationPanel.RectangleToScreen(
+            notificationPanel.ClientRectangle)
+    End Function
+
+    Private Function NotificationPanelContainsScreenPoint(
+        screenPoint As Point) As Boolean
+
+        If notificationPanel Is Nothing OrElse Not notificationPanel.Visible Then
+            Return False
+        End If
+
+        Return NotificationPanelScreenRectangle().Contains(screenPoint)
+    End Function
 
     Private Sub BuildDashboard()
         workspace = New Panel With {
@@ -422,6 +811,10 @@ Public Class MainForm
         workspace.BringToFront()
 
         BuildDashboardContent()
+
+        If notificationPanel IsNot Nothing Then
+            notificationPanel.BringToFront()
+        End If
     End Sub
 
     Private Sub BuildDashboardContent()
@@ -828,9 +1221,50 @@ Public Class MainForm
         refreshButton.FlatAppearance.BorderSize = 0
         workspace.Controls.Add(refreshButton)
 
+        Dim searchLabel As New Label With {
+            .Text = "Search assets:",
+            .Location = New Point(28, 157),
+            .AutoSize = True
+        }
+
+        workspace.Controls.Add(searchLabel)
+
+        Dim searchBox As New TextBox With {
+            .Location = New Point(125, 152),
+            .Size = New Size(260, 28)
+        }
+
+        searchBox.AccessibleName = "Search assets"
+        searchBox.AccessibleDescription =
+            "Search by asset code, asset name, or category."
+        workspace.Controls.Add(searchBox)
+
+        Dim clearSearchButton As New Button With {
+            .Text = "Clear Search",
+            .Location = New Point(395, 150),
+            .Size = New Size(110, 32),
+            .BackColor = Color.White,
+            .ForeColor = deepGreen,
+            .FlatStyle = FlatStyle.Flat,
+            .Cursor = Cursors.Hand
+        }
+
+        clearSearchButton.FlatAppearance.BorderColor = primaryGreen
+        workspace.Controls.Add(clearSearchButton)
+
+        Dim matchCountLabel As New Label With {
+            .Text = "Matching assets: 0",
+            .Location = New Point(520, 157),
+            .AutoSize = True,
+            .ForeColor = deepGreen,
+            .Font = New Font("Segoe UI", 9, FontStyle.Bold)
+        }
+
+        workspace.Controls.Add(matchCountLabel)
+
         Dim statusLabel As New Label With {
             .Text = "Choose a reporting period and date.",
-            .Location = New Point(28, 150),
+            .Location = New Point(28, 190),
             .AutoSize = True,
             .ForeColor = Color.Gray
         }
@@ -838,8 +1272,8 @@ Public Class MainForm
         workspace.Controls.Add(statusLabel)
 
         Dim reportGrid As New DataGridView With {
-            .Location = New Point(25, 185),
-            .Size = New Size(1100, 420),
+            .Location = New Point(25, 220),
+            .Size = New Size(1100, 385),
             .Anchor = AnchorStyles.Top Or
                       AnchorStyles.Left Or
                       AnchorStyles.Right,
@@ -895,6 +1329,11 @@ Public Class MainForm
                     reportGrid,
                     statusLabel,
                     refreshButton)
+
+                FilterLapsingScheduleGrid(
+                    reportGrid,
+                    searchBox.Text,
+                    matchCountLabel)
             End Function
 
         AddHandler refreshButton.Click,
@@ -910,6 +1349,23 @@ Public Class MainForm
                         periodPicker.SelectedItem.ToString() &
                         ". Click Load Report to refresh."
                 End If
+            End Sub
+
+        AddHandler searchBox.TextChanged,
+            Sub(sender, e)
+                FilterLapsingScheduleGrid(
+                    reportGrid,
+                    searchBox.Text,
+                    matchCountLabel)
+            End Sub
+
+        AddHandler clearSearchButton.Click,
+            Sub(sender, e)
+                searchBox.Clear()
+                FilterLapsingScheduleGrid(
+                    reportGrid,
+                    searchBox.Text,
+                    matchCountLabel)
             End Sub
 
         Await loadReport()
@@ -1084,6 +1540,58 @@ Public Class MainForm
         End Try
     End Function
 
+    Private Sub FilterLapsingScheduleGrid(
+        reportGrid As DataGridView,
+        searchText As String,
+        matchCountLabel As Label)
+
+        Dim query As String = searchText.Trim()
+        Dim matchingAssets As Integer = 0
+
+        For Each row As DataGridViewRow In reportGrid.Rows
+            If row.IsNewRow Then Continue For
+
+            Dim assetName As String =
+                Convert.ToString(row.Cells("name").Value)
+
+            If String.Equals(
+                assetName,
+                "TOTAL",
+                StringComparison.OrdinalIgnoreCase) Then
+
+                row.Visible = True
+                Continue For
+            End If
+
+            Dim assetCode As String =
+                Convert.ToString(row.Cells("asset_code").Value)
+
+            Dim category As String =
+                Convert.ToString(row.Cells("category").Value)
+
+            Dim matches As Boolean =
+                query.Length = 0 OrElse
+                assetCode.IndexOf(
+                    query,
+                    StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+                assetName.IndexOf(
+                    query,
+                    StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+                category.IndexOf(
+                    query,
+                    StringComparison.OrdinalIgnoreCase) >= 0
+
+            row.Visible = matches
+
+            If matches Then
+                matchingAssets += 1
+            End If
+        Next
+
+        matchCountLabel.Text =
+            "Matching assets: " & matchingAssets.ToString()
+    End Sub
+
     ' =========================================================
     ' JSON AND DISPLAY HELPERS
     ' =========================================================
@@ -1196,5 +1704,73 @@ Public Class MainForm
 
         updateRegion()
     End Sub
+
+Private Sub HandleAppNotification(
+    notification As AppNotifications.NotificationItem)
+
+    If Me.IsDisposed OrElse notification Is Nothing Then Return
+
+    If Me.InvokeRequired Then
+        Me.BeginInvoke(
+            New Action(
+                Sub()
+                    HandleAppNotification(notification)
+                End Sub))
+        Return
+    End If
+
+    notificationMessageText =
+        notification.Title & ": " & notification.Message
+
+    notificationUnread = True
+
+    If notificationBadge IsNot Nothing Then
+        notificationBadge.Text =
+            AppNotifications.GetUnreadCount().ToString()
+        notificationBadge.Visible = True
+    End If
+
+    If notificationMessage IsNot Nothing Then
+        notificationMessage.Text = notificationMessageText
+    End If
+
+End Sub
+
+Private Async Sub LogoutButton_Click(
+    sender As Object,
+    e As EventArgs)
+
+    Dim result As DialogResult = MessageBox.Show(
+        "Are you sure you want to log out?",
+        "Confirm Logout",
+        MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question)
+
+    If result <> DialogResult.Yes Then
+        Return
+    End If
+
+    Try
+        ' Attempt to invalidate the server-side API token.
+        ApiSession.ApplyAuthorization()
+
+        Using response As HttpResponseMessage =
+            Await ApiSession.Client.PostAsync("logout", Nothing)
+
+            ' Local logout will proceed even if the server
+            ' does not provide a working logout endpoint.
+        End Using
+
+    Catch ex As Exception
+        ' Continue with local logout if the API is unavailable.
+    Finally
+        ' Clear the token and all authenticated user information.
+        ApiSession.Clear()
+
+        ' Close MainForm and return control to LoginForm.
+        Me.Close()
+    End Try
+
+End Sub
 
 End Class

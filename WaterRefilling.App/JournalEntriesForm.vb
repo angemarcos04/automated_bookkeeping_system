@@ -23,18 +23,8 @@ Public Class JournalEntriesForm
     Private ReadOnly linesGrid As New DataGridView()
     Private ReadOnly detailsLabel As New Label()
 
-    ' Search controls
-    Private ReadOnly searchInput As New TextBox()
-    Private ReadOnly clearSearchButton As New Button()
-    Private ReadOnly resultCountLabel As New Label()
-
-    ' Loaded and displayed records
-    Private allEntries As New List(Of JournalEntryRow)()
-    Private displayedEntries As New List(Of JournalEntryRow)()
-
     Private isLoading As Boolean
     Private isPosting As Boolean
-    Private isFiltering As Boolean
     Private selectedEntryId As Integer?
 
     Public Sub New()
@@ -45,14 +35,7 @@ Public Class JournalEntriesForm
         AddHandler Me.Load, AddressOf JournalEntriesForm_Load
         AddHandler refreshButton.Click, AddressOf RefreshButton_Click
         AddHandler postButton.Click, AddressOf PostButton_Click
-        AddHandler entriesGrid.SelectionChanged,
-            AddressOf EntriesGrid_SelectionChanged
-        AddHandler searchInput.TextChanged,
-            AddressOf SearchInput_TextChanged
-        AddHandler searchInput.KeyDown,
-            AddressOf SearchInput_KeyDown
-        AddHandler clearSearchButton.Click,
-            AddressOf ClearSearchButton_Click
+        AddHandler entriesGrid.SelectionChanged, AddressOf EntriesGrid_SelectionChanged
     End Sub
 
     Private Sub InitializeComponent()
@@ -83,7 +66,7 @@ Public Class JournalEntriesForm
         postButton.Enabled = False
 
         statusLabel.Location = New Point(20, 60)
-        statusLabel.Size = New Size(1120, 25)
+        statusLabel.Size = New Size(1120, 30)
         statusLabel.ForeColor = Color.FromArgb(80, 90, 80)
         statusLabel.Anchor =
             AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
@@ -96,31 +79,8 @@ Public Class JournalEntriesForm
             .Size = New Size(400, 25)
         }
 
-        ' Search bar
-        searchInput.Location = New Point(20, 125)
-        searchInput.Size = New Size(650, 30)
-        searchInput.Anchor =
-            AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
-        searchInput.Font = New Font("Segoe UI", 10.0F)
-        searchInput.PlaceholderText =
-            "Search journal number, date, description, reference, status..."
-
-        clearSearchButton.Text = "Clear Search"
-        clearSearchButton.Location = New Point(680, 123)
-        clearSearchButton.Size = New Size(115, 32)
-        clearSearchButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        StyleButton(clearSearchButton, Color.FromArgb(100, 116, 106))
-
-        resultCountLabel.Location = New Point(805, 125)
-        resultCountLabel.Size = New Size(355, 30)
-        resultCountLabel.Anchor =
-            AnchorStyles.Top Or AnchorStyles.Right
-        resultCountLabel.TextAlign = ContentAlignment.MiddleRight
-        resultCountLabel.ForeColor = Color.FromArgb(35, 90, 60)
-        resultCountLabel.Text = "0 of 0 entries"
-
-        entriesGrid.Location = New Point(20, 165)
-        entriesGrid.Size = New Size(1140, 210)
+        entriesGrid.Location = New Point(20, 125)
+        entriesGrid.Size = New Size(1140, 250)
         entriesGrid.Anchor =
             AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         entriesGrid.BackgroundColor = Color.White
@@ -143,9 +103,6 @@ Public Class JournalEntriesForm
         Me.Controls.Add(postButton)
         Me.Controls.Add(statusLabel)
         Me.Controls.Add(entriesLabel)
-        Me.Controls.Add(searchInput)
-        Me.Controls.Add(clearSearchButton)
-        Me.Controls.Add(resultCountLabel)
         Me.Controls.Add(entriesGrid)
         Me.Controls.Add(detailsLabel)
         Me.Controls.Add(linesGrid)
@@ -204,42 +161,16 @@ Public Class JournalEntriesForm
 
     Private Async Sub JournalEntriesForm_Load(
         sender As Object,
-        e As EventArgs)
-
+        e As EventArgs
+    )
         Await LoadJournalEntriesAsync()
     End Sub
 
     Private Async Sub RefreshButton_Click(
         sender As Object,
-        e As EventArgs)
-
+        e As EventArgs
+    )
         Await LoadJournalEntriesAsync()
-    End Sub
-
-    Private Sub SearchInput_TextChanged(
-        sender As Object,
-        e As EventArgs)
-
-        ApplySearch()
-    End Sub
-
-    Private Sub SearchInput_KeyDown(
-        sender As Object,
-        e As KeyEventArgs)
-
-        If e.KeyCode = Keys.Enter Then
-            e.SuppressKeyPress = True
-            ApplySearch()
-        End If
-    End Sub
-
-    Private Sub ClearSearchButton_Click(
-        sender As Object,
-        e As EventArgs)
-
-        searchInput.Clear()
-        searchInput.Focus()
-        ApplySearch()
     End Sub
 
     Private Async Function LoadJournalEntriesAsync() As Task
@@ -264,12 +195,9 @@ Public Class JournalEntriesForm
                         $"Unable to load journal entries " &
                         $"({CInt(response.StatusCode)}): {ExtractApiMessage(body)}"
 
-                    allEntries.Clear()
-                    displayedEntries.Clear()
                     entriesGrid.DataSource = Nothing
                     linesGrid.DataSource = Nothing
                     selectedEntryId = Nothing
-                    UpdateResultCount()
                     Return
                 End If
 
@@ -280,7 +208,7 @@ Public Class JournalEntriesForm
                 Dim entries As List(Of JournalEntryItem) =
                     If(page?.Data, New List(Of JournalEntryItem)())
 
-                allEntries = New List(Of JournalEntryRow)()
+                Dim rows As New List(Of JournalEntryRow)
 
                 For Each entry As JournalEntryItem In entries
                     If entry Is Nothing Then Continue For
@@ -294,7 +222,7 @@ Public Class JournalEntriesForm
                     Dim totalCredit As Decimal =
                         entryLines.Sum(Function(line) line.CreditAmount)
 
-                    allEntries.Add(New JournalEntryRow With {
+                    rows.Add(New JournalEntryRow With {
                         .ID = entry.Id,
                         .JournalNumber = entry.JournalNumber,
                         .Date = entry.EntryDate,
@@ -309,20 +237,48 @@ Public Class JournalEntriesForm
                     })
                 Next
 
-                selectedEntryId = Nothing
-                ApplySearch()
+                entriesGrid.DataSource = Nothing
+                entriesGrid.DataSource = rows
 
-                If allEntries.Count = 0 Then
-                    statusLabel.Text =
-                        "No journal entries were returned by the API."
+                If entriesGrid.Columns.Contains("ID") Then
+                    entriesGrid.Columns("ID").Visible = False
+                End If
+
+                If entriesGrid.Columns.Contains("ReferenceID") Then
+                    entriesGrid.Columns("ReferenceID").Visible = False
+                End If
+
+                If entriesGrid.Columns.Contains("TotalDebit") Then
+                    entriesGrid.Columns("TotalDebit").DefaultCellStyle.Format = "N2"
+                End If
+
+                If entriesGrid.Columns.Contains("TotalCredit") Then
+                    entriesGrid.Columns("TotalCredit").DefaultCellStyle.Format = "N2"
+                End If
+
+                If rows.Count = 0 Then
+                    statusLabel.Text = "No journal entries were returned by the API."
                     linesGrid.DataSource = Nothing
-                ElseIf displayedEntries.Count = 0 Then
-                    statusLabel.Text =
-                        "No journal entries match your search."
-                    linesGrid.DataSource = Nothing
+                    selectedEntryId = Nothing
                 Else
+                    entriesGrid.ClearSelection()
+
+                    If entriesGrid.Columns.Contains("JournalNumber") Then
+                        entriesGrid.CurrentCell =
+                            entriesGrid.Rows(0).Cells("JournalNumber")
+                    End If
+
+                    entriesGrid.Rows(0).Selected = True
+
+                    Dim firstId As Integer = rows(0).ID
+                    selectedEntryId = firstId
+                    UpdatePostButtonState()
+
                     statusLabel.Text =
-                        $"Loaded {allEntries.Count} journal entry record(s)."
+                        $"Loaded {rows.Count} journal entry record(s)."
+
+                    ' Explicitly load the first row's details.
+                    Await LoadSelectedEntryLinesAsync(firstId)
                 End If
             End Using
 
@@ -345,143 +301,11 @@ Public Class JournalEntriesForm
         End Try
     End Function
 
-    Private Sub ApplySearch()
-        If isFiltering Then Return
-
-        isFiltering = True
-
-        Try
-            Dim query As String = searchInput.Text.Trim()
-
-            If String.IsNullOrWhiteSpace(query) Then
-                displayedEntries = allEntries.ToList()
-            Else
-                displayedEntries = allEntries.Where(
-                    Function(entry)
-                        Return ContainsText(entry.JournalNumber, query) OrElse
-                               ContainsText(entry.Date, query) OrElse
-                               ContainsText(entry.Description, query) OrElse
-                               ContainsText(entry.ReferenceType, query) OrElse
-                               ContainsText(
-                                   If(entry.ReferenceID.HasValue,
-                                      entry.ReferenceID.Value.ToString(),
-                                      ""),
-                                   query) OrElse
-                               ContainsText(entry.Status, query) OrElse
-                               ContainsText(entry.TotalDebit.ToString("N2"), query) OrElse
-                               ContainsText(entry.TotalCredit.ToString("N2"), query) OrElse
-                               ContainsText(entry.Balanced.ToString(), query)
-                    End Function).ToList()
-            End If
-
-            entriesGrid.DataSource = Nothing
-            entriesGrid.DataSource = displayedEntries.ToList()
-
-            If entriesGrid.Columns.Contains("ID") Then
-                entriesGrid.Columns("ID").Visible = False
-            End If
-
-            If entriesGrid.Columns.Contains("ReferenceID") Then
-                entriesGrid.Columns("ReferenceID").Visible = False
-            End If
-
-            SetColumnHeader("JournalNumber", "Journal Number")
-            SetColumnHeader("Date", "Date")
-            SetColumnHeader("Description", "Description")
-            SetColumnHeader("ReferenceType", "Reference Type")
-            SetColumnHeader("Status", "Status")
-            SetColumnHeader("TotalDebit", "Total Debit")
-            SetColumnHeader("TotalCredit", "Total Credit")
-            SetColumnHeader("Balanced", "Balanced")
-
-            If entriesGrid.Columns.Contains("TotalDebit") Then
-                entriesGrid.Columns("TotalDebit").DefaultCellStyle.Format = "N2"
-            End If
-
-            If entriesGrid.Columns.Contains("TotalCredit") Then
-                entriesGrid.Columns("TotalCredit").DefaultCellStyle.Format = "N2"
-            End If
-
-            If displayedEntries.Count = 0 Then
-                selectedEntryId = Nothing
-                entriesGrid.ClearSelection()
-                linesGrid.DataSource = Nothing
-                detailsLabel.Text = "Selected Entry Details"
-                UpdateResultCount()
-                UpdatePostButtonState()
-                Return
-            End If
-
-            Dim target As JournalEntryRow = Nothing
-
-            If selectedEntryId.HasValue Then
-                target = displayedEntries.FirstOrDefault(
-                    Function(entry) entry.ID = selectedEntryId.Value)
-            End If
-
-            If target Is Nothing Then
-                target = displayedEntries(0)
-            End If
-
-            selectedEntryId = target.ID
-
-            For Each row As DataGridViewRow In entriesGrid.Rows
-                Dim idValue As Object = row.Cells("ID").Value
-
-                If idValue IsNot Nothing AndAlso
-                   Convert.ToInt32(idValue) = target.ID Then
-
-                    row.Selected = True
-
-                    If entriesGrid.Columns.Contains("JournalNumber") Then
-                        entriesGrid.CurrentCell =
-                            row.Cells("JournalNumber")
-                    End If
-
-                    Exit For
-                End If
-            Next
-
-            UpdateResultCount()
-            UpdatePostButtonState()
-
-            ' Details are loaded through the existing API route when needed.
-            ' The SelectionChanged handler loads the selected entry details.
-
-        Finally
-            isFiltering = False
-        End Try
-    End Sub
-
-    Private Sub SetColumnHeader(
-        columnName As String,
-        header As String)
-
-        If entriesGrid.Columns.Contains(columnName) Then
-            entriesGrid.Columns(columnName).HeaderText = header
-        End If
-    End Sub
-
-    Private Sub UpdateResultCount()
-        resultCountLabel.Text =
-            $"{displayedEntries.Count} of {allEntries.Count} entries"
-    End Sub
-
-    Private Function ContainsText(
-        value As String,
-        query As String) As Boolean
-
-        Return Not String.IsNullOrEmpty(value) AndAlso
-            value.IndexOf(
-                query,
-                StringComparison.OrdinalIgnoreCase) >= 0
-    End Function
-
     Private Async Sub EntriesGrid_SelectionChanged(
         sender As Object,
-        e As EventArgs)
-
-        If isLoading OrElse isPosting OrElse isFiltering OrElse
+        e As EventArgs
+    )
+        If isLoading OrElse isPosting OrElse
            entriesGrid.CurrentRow Is Nothing Then Return
 
         If Not entriesGrid.Columns.Contains("ID") Then Return
@@ -496,9 +320,7 @@ Public Class JournalEntriesForm
 
         If Not Integer.TryParse(selectedValue.ToString(), entryId) Then Return
 
-        If selectedEntryId.HasValue AndAlso
-           selectedEntryId.Value = entryId Then
-
+        If selectedEntryId.HasValue AndAlso selectedEntryId.Value = entryId Then
             UpdatePostButtonState()
             Return
         End If
@@ -511,10 +333,13 @@ Public Class JournalEntriesForm
 
     Private Sub UpdatePostButtonState()
         If isPosting OrElse isLoading OrElse
-           Not selectedEntryId.HasValue OrElse
-           entriesGrid.CurrentRow Is Nothing OrElse
-           Not entriesGrid.Columns.Contains("Status") Then
+           Not selectedEntryId.HasValue Then
+            postButton.Enabled = False
+            Return
+        End If
 
+        If entriesGrid.CurrentRow Is Nothing OrElse
+           Not entriesGrid.Columns.Contains("Status") Then
             postButton.Enabled = False
             Return
         End If
@@ -531,13 +356,12 @@ Public Class JournalEntriesForm
 
     Private Async Sub PostButton_Click(
         sender As Object,
-        e As EventArgs)
-
+        e As EventArgs
+    )
         If Not selectedEntryId.HasValue OrElse isPosting Then Return
 
         If entriesGrid.CurrentRow Is Nothing OrElse
            Not entriesGrid.Columns.Contains("Status") Then
-
             MessageBox.Show(
                 "Select a journal entry first.",
                 "Journal Entries",
@@ -566,8 +390,7 @@ Public Class JournalEntriesForm
 
         Dim entryId As Integer = selectedEntryId.Value
         Dim journalNumber As String =
-            Convert.ToString(
-                entriesGrid.CurrentRow.Cells("JournalNumber").Value)
+            Convert.ToString(entriesGrid.CurrentRow.Cells("JournalNumber").Value)
 
         If MessageBox.Show(
             $"Post journal entry {journalNumber}?" &
@@ -649,8 +472,8 @@ Public Class JournalEntriesForm
     End Sub
 
     Private Async Function LoadSelectedEntryLinesAsync(
-        entryId As Integer) As Task
-
+        entryId As Integer
+    ) As Task
         statusLabel.Text = "Loading selected journal entry details..."
         linesGrid.DataSource = Nothing
 
@@ -678,7 +501,6 @@ Public Class JournalEntriesForm
                     If root.ValueKind = JsonValueKind.Object AndAlso
                        root.TryGetProperty("data", dataElement) AndAlso
                        dataElement.ValueKind = JsonValueKind.Object Then
-
                         entryElement = dataElement
                     End If
 
@@ -687,8 +509,7 @@ Public Class JournalEntriesForm
                             entryElement.GetRawText(), jsonOptions)
 
                     If entry Is Nothing Then
-                        statusLabel.Text =
-                            "The API returned an empty journal entry."
+                        statusLabel.Text = "The API returned an empty journal entry."
                         Return
                     End If
 
@@ -713,15 +534,6 @@ Public Class JournalEntriesForm
                     linesGrid.DataSource = Nothing
                     linesGrid.DataSource = detailRows
 
-                    If linesGrid.Columns.Contains("AccountID") Then
-                        linesGrid.Columns("AccountID").Visible = False
-                    End If
-
-                    SetLineHeader("AccountName", "Account")
-                    SetLineHeader("Description", "Description")
-                    SetLineHeader("DebitAmount", "Debit")
-                    SetLineHeader("CreditAmount", "Credit")
-
                     If linesGrid.Columns.Contains("DebitAmount") Then
                         linesGrid.Columns("DebitAmount").DefaultCellStyle.Format = "N2"
                     End If
@@ -742,28 +554,15 @@ Public Class JournalEntriesForm
                            "Balanced",
                            "Not balanced")
 
-                    detailsLabel.Text =
-                        $"Entry Details - {entry.JournalNumber}"
-
                     statusLabel.Text =
                         $"Entry {entry.JournalNumber} ({entry.Status}): " &
                         $"Debit {debitTotal:N2} | " &
                         $"Credit {creditTotal:N2} | {balanceText}"
 
-                    ' Keep the displayed status in sync with the detail response.
-                    Dim loadedRow = allEntries.FirstOrDefault(
-                        Function(item) item.ID = entryId)
-
-                    If loadedRow IsNot Nothing Then
-                        loadedRow.Status = entry.Status
-                    End If
-
                     If entriesGrid.CurrentRow IsNot Nothing AndAlso
                        entriesGrid.Columns.Contains("Status") Then
                         entriesGrid.CurrentRow.Cells("Status").Value = entry.Status
                     End If
-
-                    UpdatePostButtonState()
                 End Using
             End Using
 
@@ -772,8 +571,7 @@ Public Class JournalEntriesForm
                 "The journal entry details could not be read: " & ex.Message
 
         Catch ex As HttpRequestException
-            statusLabel.Text =
-                "Could not connect to the Laravel API."
+            statusLabel.Text = "Could not connect to the Laravel API."
 
         Catch ex As Exception
             statusLabel.Text =
@@ -783,15 +581,6 @@ Public Class JournalEntriesForm
             UpdatePostButtonState()
         End Try
     End Function
-
-    Private Sub SetLineHeader(
-        columnName As String,
-        header As String)
-
-        If linesGrid.Columns.Contains(columnName) Then
-            linesGrid.Columns(columnName).HeaderText = header
-        End If
-    End Sub
 
     Private Function ExtractApiMessage(body As String) As String
         If String.IsNullOrWhiteSpace(body) Then
@@ -806,7 +595,6 @@ Public Class JournalEntriesForm
                 If root.ValueKind = JsonValueKind.Object AndAlso
                    root.TryGetProperty("message", messageElement) AndAlso
                    messageElement.ValueKind = JsonValueKind.String Then
-
                     Return messageElement.GetString()
                 End If
 
@@ -818,17 +606,10 @@ Public Class JournalEntriesForm
 
                     Dim messages As New List(Of String)
 
-                    For Each propertyItem As JsonProperty In
-                        errorsElement.EnumerateObject()
-
-                        If propertyItem.Value.ValueKind =
-                            JsonValueKind.Array Then
-
-                            For Each item As JsonElement In
-                                propertyItem.Value.EnumerateArray()
-
-                                If item.ValueKind =
-                                    JsonValueKind.String Then
+                    For Each propertyItem As JsonProperty In errorsElement.EnumerateObject()
+                        If propertyItem.Value.ValueKind = JsonValueKind.Array Then
+                            For Each item As JsonElement In propertyItem.Value.EnumerateArray()
+                                If item.ValueKind = JsonValueKind.String Then
                                     messages.Add(item.GetString())
                                 End If
                             Next
@@ -836,14 +617,12 @@ Public Class JournalEntriesForm
                     Next
 
                     If messages.Count > 0 Then
-                        Return String.Join(
-                            Environment.NewLine, messages)
+                        Return String.Join(Environment.NewLine, messages)
                     End If
                 End If
             End Using
-
         Catch
-            ' Return the response body when it is not valid JSON.
+            ' Use the response body if it is not JSON.
         End Try
 
         Return body

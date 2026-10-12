@@ -4,11 +4,13 @@ Imports System.Text
 Imports System.Text.Json
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
+Imports System.Collections.Generic
 
 Public Class LoginForm
     Inherits Form
 
-    Private Const ApiUrl As String = "https://automated-bookkeeping-system.onrender.com/api/login"
+    Private Const ApiUrl As String =
+        "http://127.0.0.1:8000/api/login"
 
     Private ReadOnly emailInput As New TextBox()
     Private ReadOnly passwordInput As New TextBox()
@@ -157,6 +159,11 @@ Public Class LoginForm
             Dim receivedToken As String = String.Empty
             Dim receivedTokenType As String = String.Empty
 
+            Dim parsedUserId As Integer = 0
+            Dim parsedUserName As String = String.Empty
+            Dim parsedUserEmail As String = String.Empty
+            Dim parsedRoles As New List(Of String)()
+
             Using client As New HttpClient()
                 client.Timeout = TimeSpan.FromSeconds(15)
 
@@ -221,8 +228,7 @@ Public Class LoginForm
                                 Return
                             End If
 
-                            receivedToken =
-                                tokenElement.GetString()
+                            receivedToken = tokenElement.GetString()
 
                             If String.IsNullOrWhiteSpace(receivedToken) Then
                                 statusLabel.ForeColor = Color.Firebrick
@@ -252,24 +258,128 @@ Public Class LoginForm
                                     "The server returned an unsupported token type."
                                 Return
                             End If
+
+                            ' Read the authenticated user information.
+                            Dim userElement As JsonElement
+
+                            If Not root.TryGetProperty(
+                                "user", userElement) OrElse
+                                userElement.ValueKind <>
+                                JsonValueKind.Object Then
+
+                                statusLabel.ForeColor = Color.Firebrick
+                                statusLabel.Text =
+                                    "Login response is missing user information."
+                                Return
+                            End If
+
+                            Dim idElement As JsonElement
+                            Dim nameElement As JsonElement
+                            Dim emailElement As JsonElement
+                            Dim rolesElement As JsonElement
+
+                            If userElement.TryGetProperty(
+                                "id", idElement) Then
+
+                                If Not Integer.TryParse(
+                                    idElement.ToString(),
+                                    parsedUserId) OrElse
+                                    parsedUserId <= 0 Then
+
+                                    statusLabel.ForeColor = Color.Firebrick
+                                    statusLabel.Text =
+                                        "The server returned an invalid user ID."
+                                    Return
+                                End If
+                            Else
+                                statusLabel.ForeColor = Color.Firebrick
+                                statusLabel.Text =
+                                    "The server did not return a user ID."
+                                Return
+                            End If
+
+                            If userElement.TryGetProperty(
+                                "name", nameElement) AndAlso
+                                nameElement.ValueKind =
+                                JsonValueKind.String Then
+
+                                parsedUserName = nameElement.GetString()
+                            End If
+
+                            If userElement.TryGetProperty(
+                                "email", emailElement) AndAlso
+                                emailElement.ValueKind =
+                                JsonValueKind.String Then
+
+                                parsedUserEmail = emailElement.GetString()
+                            End If
+
+                            If userElement.TryGetProperty(
+                                "roles", rolesElement) AndAlso
+                                rolesElement.ValueKind =
+                                JsonValueKind.Array Then
+
+                                For Each roleElement As JsonElement In
+                                    rolesElement.EnumerateArray()
+
+                                    If roleElement.ValueKind =
+                                        JsonValueKind.String Then
+
+                                        Dim roleName As String =
+                                            roleElement.GetString()
+
+                                        If Not String.IsNullOrWhiteSpace(
+                                            roleName) Then
+
+                                            parsedRoles.Add(roleName.Trim())
+                                        End If
+                                    End If
+                                Next
+                            End If
+
+                            If String.IsNullOrWhiteSpace(parsedUserName) OrElse
+                               String.IsNullOrWhiteSpace(parsedUserEmail) Then
+
+                                statusLabel.ForeColor = Color.Firebrick
+                                statusLabel.Text =
+                                    "The server returned incomplete user information."
+                                Return
+                            End If
                         End Using
                     End Using
                 End Using
             End Using
 
-            ' Save the token for use by other application forms.
+            ' Store the authenticated session for the other forms.
             ApiSession.BearerToken = receivedToken
+            ApiSession.CurrentUserId = parsedUserId
+            ApiSession.CurrentUserName = parsedUserName
+            ApiSession.CurrentUserEmail = parsedUserEmail
+            ApiSession.CurrentUserRoles = parsedRoles
+
+            ApiSession.ApplyAuthorization()
 
             statusLabel.ForeColor = Color.FromArgb(23, 107, 58)
             statusLabel.Text = "Login successful."
 
-            Hide()
+        Hide()
 
-            Using main As New MainForm()
-                main.ShowDialog()
-            End Using
+Using main As New MainForm()
+    main.ShowDialog()
+End Using
 
-            Close()
+If String.IsNullOrWhiteSpace(ApiSession.BearerToken) Then
+    ApiSession.Clear()
+
+    passwordInput.Clear()
+    statusLabel.ForeColor = Color.FromArgb(23, 107, 58)
+    statusLabel.Text = "You have been logged out."
+
+    Show()
+    Activate()
+Else
+    Close()
+End If
 
         Catch ex As TaskCanceledException
             statusLabel.ForeColor = Color.Firebrick
