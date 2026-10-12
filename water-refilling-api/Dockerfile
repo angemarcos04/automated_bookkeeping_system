@@ -1,7 +1,7 @@
 FROM php:8.3-apache
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git unzip libzip-dev libcurl4-openssl-dev libxml2-dev \
+    && apt-get install -y --no-install-recommends git unzip curl libzip-dev libcurl4-openssl-dev libxml2-dev \
     && docker-php-ext-install pdo_mysql mbstring bcmath exif pcntl zip curl dom xml \
     && rm -rf /var/lib/apt/lists/*
 
@@ -24,4 +24,5 @@ RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoload
 EXPOSE 10000
 
 CMD ["bash", "-lc", "sed -i \"s/Listen 80/Listen ${PORT:-10000}/\" /etc/apache2/ports.conf && sed -i \"s/:80>/:${PORT:-10000}>/\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
+
 
