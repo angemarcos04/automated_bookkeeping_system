@@ -1,6 +1,7 @@
 ﻿Imports System
 Imports System.Collections.Generic
 Imports System.Drawing
+Imports System.Linq
 Imports System.Net.Http
 Imports System.Text
 Imports System.Text.Json
@@ -19,12 +20,17 @@ Public Class ChartOfAccountsForm
     Private cboType As ComboBox
     Private chkActive As CheckBox
 
+    Private searchInput As TextBox
+    Private clearSearchButton As Button
+    Private resultCountLabel As Label
+
     Private createButton As Button
     Private updateButton As Button
     Private deactivateButton As Button
     Private clearButton As Button
     Private refreshButton As Button
 
+    Private allAccounts As New List(Of AccountItem)()
     Private selectedAccountId As Integer = 0
     Private isBusy As Boolean = False
     Private isLoading As Boolean = False
@@ -129,18 +135,54 @@ Public Class ChartOfAccountsForm
             formPanel, "Refresh List", 660, 175, 120,
             AddressOf RefreshButton_Click)
 
+        ' Search controls
+        searchInput = New TextBox With {
+            .Location = New Point(20, 318),
+            .Size = New Size(500, 30),
+            .Font = New Font("Segoe UI", 10),
+            .PlaceholderText = "Search code, account name, type, group, or description..."
+        }
+        AddHandler searchInput.TextChanged, AddressOf SearchInput_TextChanged
+        Me.Controls.Add(searchInput)
+
+        clearSearchButton = New Button With {
+            .Text = "Clear Search",
+            .Location = New Point(530, 316),
+            .Size = New Size(120, 32),
+            .BackColor = Color.FromArgb(65, 90, 78),
+            .ForeColor = Color.White,
+            .FlatStyle = FlatStyle.Flat,
+            .Cursor = Cursors.Hand,
+            .Font = New Font("Segoe UI", 9, FontStyle.Bold)
+        }
+        clearSearchButton.FlatAppearance.BorderSize = 0
+        AddHandler clearSearchButton.Click, AddressOf ClearSearchButton_Click
+        Me.Controls.Add(clearSearchButton)
+
+        resultCountLabel = New Label With {
+            .Text = "0 accounts",
+            .Location = New Point(665, 321),
+            .Size = New Size(465, 25),
+            .ForeColor = Color.LightGreen,
+            .AutoEllipsis = True,
+            .TextAlign = ContentAlignment.MiddleRight,
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        }
+        Me.Controls.Add(resultCountLabel)
+
         statusLabel = New Label With {
             .Text = "Ready",
-            .Location = New Point(20, 315),
-            .Size = New Size(1100, 22),
+            .Location = New Point(20, 352),
+            .Size = New Size(1110, 22),
             .ForeColor = Color.LightGreen,
-            .AutoEllipsis = True
+            .AutoEllipsis = True,
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         }
         Me.Controls.Add(statusLabel)
 
         accountsGrid = New DataGridView With {
-            .Location = New Point(20, 345),
-            .Size = New Size(1110, 410),
+            .Location = New Point(20, 382),
+            .Size = New Size(1110, 373),
             .Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or
                       AnchorStyles.Left Or AnchorStyles.Right,
             .BackgroundColor = Color.White,
@@ -295,22 +337,13 @@ Public Class ChartOfAccountsForm
                         json, options)
 
                 If result IsNot Nothing AndAlso result.data IsNot Nothing Then
-                    accountsGrid.DataSource = Nothing
-                    accountsGrid.DataSource = result.data
-
-                    For Each row As DataGridViewRow In accountsGrid.Rows
-                        Dim account As AccountItem =
-                            TryCast(row.DataBoundItem, AccountItem)
-
-                        If account IsNot Nothing AndAlso Not account.is_active Then
-                            row.DefaultCellStyle.ForeColor = Color.Gray
-                        End If
-                    Next
-
+                    allAccounts = result.data
+                    ApplyAccountSearch()
                     statusLabel.Text =
-                        result.data.Count.ToString() & " account(s) loaded."
+                        allAccounts.Count.ToString() & " account(s) loaded."
                 Else
-                    accountsGrid.DataSource = Nothing
+                    allAccounts.Clear()
+                    ApplyAccountSearch()
                     statusLabel.Text = "The API returned no account data."
                 End If
             End Using
@@ -332,6 +365,70 @@ Public Class ChartOfAccountsForm
             refreshButton.Enabled = True
             UpdateSelectionButtons()
         End Try
+    End Function
+
+    Private Sub SearchInput_TextChanged(sender As Object, e As EventArgs)
+        ApplyAccountSearch()
+    End Sub
+
+    Private Sub ClearSearchButton_Click(sender As Object, e As EventArgs)
+        searchInput.Clear()
+        searchInput.Focus()
+    End Sub
+
+    Private Sub ApplyAccountSearch()
+        If accountsGrid Is Nothing Then Return
+
+        Dim query As String = If(searchInput Is Nothing, "", searchInput.Text.Trim())
+
+        Dim filteredAccounts As List(Of AccountItem)
+
+        If String.IsNullOrWhiteSpace(query) Then
+            filteredAccounts = allAccounts.ToList()
+        Else
+            filteredAccounts = allAccounts.Where(
+                Function(account)
+                    Return ContainsText(account.account_code, query) OrElse
+                           ContainsText(account.account_name, query) OrElse
+                           ContainsText(account.account_type, query) OrElse
+                           ContainsText(account.account_group, query) OrElse
+                           ContainsText(account.description, query) OrElse
+                           ContainsText(
+                               If(account.is_active, "Active", "Inactive"),
+                               query)
+                End Function).ToList()
+        End If
+
+        accountsGrid.DataSource = Nothing
+        accountsGrid.DataSource = filteredAccounts
+
+        For Each row As DataGridViewRow In accountsGrid.Rows
+            Dim account As AccountItem =
+                TryCast(row.DataBoundItem, AccountItem)
+
+            If account IsNot Nothing AndAlso Not account.is_active Then
+                row.DefaultCellStyle.ForeColor = Color.Gray
+            End If
+        Next
+
+        resultCountLabel.Text =
+            filteredAccounts.Count.ToString() & " of " &
+            allAccounts.Count.ToString() & " account(s)"
+
+        If filteredAccounts.Count = 0 Then
+            statusLabel.Text = "No accounts match your search."
+        ElseIf Not String.IsNullOrWhiteSpace(query) Then
+            statusLabel.Text = "Search results for: " & query
+        End If
+
+        ' Changing the displayed rows must not leave a stale selection.
+        selectedAccountId = 0
+        UpdateSelectionButtons()
+    End Sub
+
+    Private Function ContainsText(value As String, query As String) As Boolean
+        Return Not String.IsNullOrEmpty(value) AndAlso
+               value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
     End Function
 
     Private Sub AccountsGrid_SelectionChanged(sender As Object, e As EventArgs)
@@ -571,6 +668,14 @@ Public Class ChartOfAccountsForm
     End Sub
 
     Private Sub UpdateSelectionButtons()
+        If updateButton Is Nothing OrElse
+           deactivateButton Is Nothing OrElse
+           createButton Is Nothing OrElse
+           clearButton Is Nothing OrElse
+           refreshButton Is Nothing Then
+            Return
+        End If
+
         Dim hasSelection As Boolean = selectedAccountId > 0
 
         updateButton.Enabled = hasSelection AndAlso
@@ -588,13 +693,16 @@ Public Class ChartOfAccountsForm
     End Sub
 
     Private Sub SetButtonsEnabled(enabled As Boolean)
-        createButton.Enabled = enabled
-        updateButton.Enabled = enabled AndAlso selectedAccountId > 0
+        createButton.Enabled = enabled AndAlso Not isLoading
+        updateButton.Enabled = enabled AndAlso
+                               selectedAccountId > 0 AndAlso
+                               Not isLoading
         deactivateButton.Enabled = enabled AndAlso
                                    selectedAccountId > 0 AndAlso
-                                   chkActive.Checked
-        clearButton.Enabled = enabled
-        refreshButton.Enabled = enabled
+                                   chkActive.Checked AndAlso
+                                   Not isLoading
+        clearButton.Enabled = enabled AndAlso Not isLoading
+        refreshButton.Enabled = enabled AndAlso Not isLoading
     End Sub
 
     Private Sub ShowValidation(message As String)

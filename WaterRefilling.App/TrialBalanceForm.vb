@@ -2,6 +2,7 @@ Imports System.Net.Http
 Imports System.Text.Json
 Imports System.Drawing
 Imports System.Linq
+Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
 Public Class TrialBalanceForm
@@ -12,10 +13,18 @@ Public Class TrialBalanceForm
     Private ReadOnly statusLabel As New Label()
     Private ReadOnly totalsLabel As New Label()
 
+    Private ReadOnly searchInput As New TextBox()
+    Private ReadOnly clearSearchButton As New Button()
+    Private ReadOnly resultCountLabel As New Label()
+
+    Private allRows As New List(Of TrialBalanceRow)()
+    Private displayedRows As New List(Of TrialBalanceRow)()
+    Private isLoading As Boolean = False
+
     Private ReadOnly jsonOptions As New JsonSerializerOptions With {
-    .PropertyNameCaseInsensitive = True,
-    .PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-}
+        .PropertyNameCaseInsensitive = True,
+        .PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    }
 
     Public Sub New()
         Me.Text = "Trial Balance"
@@ -29,18 +38,22 @@ Public Class TrialBalanceForm
 
         AddHandler Me.Load, AddressOf FormLoaded
         AddHandler refreshButton.Click, AddressOf RefreshButtonClicked
+        AddHandler searchInput.TextChanged, AddressOf SearchInput_TextChanged
+        AddHandler searchInput.KeyDown, AddressOf SearchInput_KeyDown
+        AddHandler clearSearchButton.Click, AddressOf ClearSearchButtonClicked
     End Sub
 
     Private Sub BuildInterface()
         Dim root As New TableLayoutPanel With {
             .Dock = DockStyle.Fill,
             .ColumnCount = 1,
-            .RowCount = 4,
+            .RowCount = 5,
             .Padding = New Padding(16),
             .BackColor = Me.BackColor
         }
 
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 55))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 45))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 45))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 75))
@@ -60,11 +73,47 @@ Public Class TrialBalanceForm
         refreshButton.ForeColor = Color.White
         refreshButton.FlatStyle = FlatStyle.Flat
         refreshButton.FlatAppearance.BorderSize = 0
+        refreshButton.Cursor = Cursors.Hand
 
         Dim toolbar As New Panel With {
             .Dock = DockStyle.Fill
         }
         toolbar.Controls.Add(refreshButton)
+
+        Dim searchPanel As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 3,
+            .RowCount = 1
+        }
+
+        searchPanel.ColumnStyles.Add(
+            New ColumnStyle(SizeType.Percent, 100))
+        searchPanel.ColumnStyles.Add(
+            New ColumnStyle(SizeType.Absolute, 115))
+        searchPanel.ColumnStyles.Add(
+            New ColumnStyle(SizeType.Absolute, 190))
+
+        searchInput.Dock = DockStyle.Fill
+        searchInput.Font = New Font("Segoe UI", 10)
+        searchInput.PlaceholderText =
+            "Search account code, name, or account type..."
+
+        clearSearchButton.Text = "Clear Search"
+        clearSearchButton.Dock = DockStyle.Fill
+        clearSearchButton.BackColor = Color.FromArgb(100, 116, 106)
+        clearSearchButton.ForeColor = Color.White
+        clearSearchButton.FlatStyle = FlatStyle.Flat
+        clearSearchButton.FlatAppearance.BorderSize = 0
+        clearSearchButton.Cursor = Cursors.Hand
+
+        resultCountLabel.Dock = DockStyle.Fill
+        resultCountLabel.TextAlign = ContentAlignment.MiddleRight
+        resultCountLabel.ForeColor = Color.FromArgb(37, 91, 64)
+        resultCountLabel.Text = "0 of 0 accounts"
+
+        searchPanel.Controls.Add(searchInput, 0, 0)
+        searchPanel.Controls.Add(clearSearchButton, 1, 0)
+        searchPanel.Controls.Add(resultCountLabel, 2, 0)
 
         ConfigureGrid(reportGrid)
 
@@ -76,14 +125,16 @@ Public Class TrialBalanceForm
             .Padding = New Padding(10)
         }
 
-        summaryPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-        summaryPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+        summaryPanel.RowStyles.Add(
+            New RowStyle(SizeType.Percent, 50))
+        summaryPanel.RowStyles.Add(
+            New RowStyle(SizeType.Percent, 50))
 
         totalsLabel.Dock = DockStyle.Fill
         totalsLabel.Font = New Font("Segoe UI", 11, FontStyle.Bold)
         totalsLabel.ForeColor = Color.FromArgb(37, 91, 64)
         totalsLabel.TextAlign = ContentAlignment.MiddleLeft
-        totalsLabel.Text = "Debit total: 0.00 | Credit total: 0.00"
+        totalsLabel.Text = "Total Debits: 0.00 | Total Credits: 0.00"
 
         statusLabel.Dock = DockStyle.Fill
         statusLabel.TextAlign = ContentAlignment.MiddleLeft
@@ -95,8 +146,9 @@ Public Class TrialBalanceForm
 
         root.Controls.Add(title, 0, 0)
         root.Controls.Add(toolbar, 0, 1)
-        root.Controls.Add(reportGrid, 0, 2)
-        root.Controls.Add(summaryPanel, 0, 3)
+        root.Controls.Add(searchPanel, 0, 2)
+        root.Controls.Add(reportGrid, 0, 3)
+        root.Controls.Add(summaryPanel, 0, 4)
 
         Me.Controls.Add(root)
     End Sub
@@ -106,8 +158,10 @@ Public Class TrialBalanceForm
         grid.ReadOnly = True
         grid.AllowUserToAddRows = False
         grid.AllowUserToDeleteRows = False
-        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
-        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        grid.AutoSizeColumnsMode =
+            DataGridViewAutoSizeColumnsMode.Fill
+        grid.SelectionMode =
+            DataGridViewSelectionMode.FullRowSelect
         grid.MultiSelect = False
         grid.RowHeadersVisible = False
         grid.BackgroundColor = Color.White
@@ -125,23 +179,54 @@ Public Class TrialBalanceForm
             Color.FromArgb(248, 251, 249)
     End Sub
 
-    Private Async Sub FormLoaded(sender As Object, e As EventArgs)
+    Private Async Sub FormLoaded(
+        sender As Object,
+        e As EventArgs)
+
         Await LoadTrialBalanceAsync()
     End Sub
 
     Private Async Sub RefreshButtonClicked(
         sender As Object,
-        e As EventArgs
-    )
+        e As EventArgs)
+
         Await LoadTrialBalanceAsync()
     End Sub
 
-    Private Async Function LoadTrialBalanceAsync() As Task
-        Try
-            refreshButton.Enabled = False
-            statusLabel.Text = "Loading trial balance..."
-            reportGrid.DataSource = Nothing
+    Private Sub SearchInput_TextChanged(
+        sender As Object,
+        e As EventArgs)
 
+        ApplySearch()
+    End Sub
+
+    Private Sub SearchInput_KeyDown(
+        sender As Object,
+        e As KeyEventArgs)
+
+        If e.KeyCode = Keys.Enter Then
+            e.SuppressKeyPress = True
+            ApplySearch()
+        End If
+    End Sub
+
+    Private Sub ClearSearchButtonClicked(
+        sender As Object,
+        e As EventArgs)
+
+        searchInput.Clear()
+        searchInput.Focus()
+        ApplySearch()
+    End Sub
+
+    Private Async Function LoadTrialBalanceAsync() As Task
+        If isLoading Then Return
+
+        isLoading = True
+        refreshButton.Enabled = False
+        statusLabel.Text = "Loading trial balance..."
+
+        Try
             ApiSession.ApplyAuthorization()
 
             Using response As HttpResponseMessage =
@@ -164,68 +249,126 @@ Public Class TrialBalanceForm
                             body, jsonOptions)
 
                 If result Is Nothing OrElse result.Data Is Nothing Then
+                    allRows.Clear()
+                    displayedRows.Clear()
+                    reportGrid.DataSource = Nothing
+                    UpdateResultCount()
                     statusLabel.Text =
                         "The API returned no trial balance data."
                     Return
                 End If
 
-                Dim rows = result.Data.Select(
-                    Function(item) New With {
-                        .AccountCode = item.AccountCode,
-                        .AccountName = item.AccountName,
-                        .AccountType = item.AccountType,
+                allRows = result.Data.Select(
+                    Function(item) New TrialBalanceRow With {
+                        .AccountId = item.AccountId,
+                        .AccountCode = If(item.AccountCode, ""),
+                        .AccountName = If(item.AccountName, ""),
+                        .AccountType = If(item.AccountType, ""),
                         .DebitBalance = ToDecimal(item.DebitBalance),
                         .CreditBalance = ToDecimal(item.CreditBalance)
                     }).ToList()
 
-                reportGrid.DataSource = rows
-
-                SetColumnHeader("AccountCode", "Account Code")
-                SetColumnHeader("AccountName", "Account Name")
-                SetColumnHeader("AccountType", "Account Type")
-                SetColumnHeader("DebitBalance", "Debit Balance")
-                SetColumnHeader("CreditBalance", "Credit Balance")
-
-                FormatMoneyColumn("DebitBalance")
-                FormatMoneyColumn("CreditBalance")
-
+                ' These totals come from the API report and must not
+                ' change when the user filters the displayed accounts.
                 Dim totalDebits As Decimal =
-                    ToDecimal(result.Totals.Debits)
+                    ToDecimal(result.Totals?.Debits)
 
                 Dim totalCredits As Decimal =
-                    ToDecimal(result.Totals.Credits)
+                    ToDecimal(result.Totals?.Credits)
 
                 totalsLabel.Text =
                     $"Total Debits: {totalDebits:N2}    " &
                     $"Total Credits: {totalCredits:N2}"
 
-                If result.Totals.IsBalanced Then
-                    statusLabel.Text =
-                        $"BALANCED — Total debits equal total credits. " &
-                        $"Accounts displayed: {result.Data.Count}."
+                If result.Totals IsNot Nothing AndAlso
+                   result.Totals.IsBalanced Then
+
                     statusLabel.ForeColor =
                         Color.FromArgb(37, 91, 64)
+                    statusLabel.Text =
+                        "BALANCED — Total debits equal total credits."
                 Else
+                    statusLabel.ForeColor = Color.DarkRed
                     statusLabel.Text =
                         $"NOT BALANCED — Difference: " &
-                        $"{Math.Abs(totalDebits - totalCredits):N2}. " &
-                        $"Accounts displayed: {result.Data.Count}."
-                    statusLabel.ForeColor = Color.DarkRed
+                        $"{Math.Abs(totalDebits - totalCredits):N2}."
                 End If
+
+                ApplySearch()
+
             End Using
 
         Catch ex As Exception
             statusLabel.Text = "Error: " & ex.Message
             statusLabel.ForeColor = Color.DarkRed
+
         Finally
+            isLoading = False
             refreshButton.Enabled = True
         End Try
     End Function
 
+    Private Sub ApplySearch()
+        Dim query As String = searchInput.Text.Trim()
+
+        If String.IsNullOrWhiteSpace(query) Then
+            displayedRows = allRows.ToList()
+        Else
+            displayedRows = allRows.Where(
+                Function(item)
+                    Return ContainsText(item.AccountCode, query) OrElse
+                           ContainsText(item.AccountName, query) OrElse
+                           ContainsText(item.AccountType, query) OrElse
+                           ContainsText(item.AccountId.ToString(), query) OrElse
+                           ContainsText(item.DebitBalance.ToString("N2"), query) OrElse
+                           ContainsText(item.CreditBalance.ToString("N2"), query)
+                End Function).ToList()
+        End If
+
+        reportGrid.DataSource = Nothing
+        reportGrid.DataSource = displayedRows.ToList()
+
+        SetColumnHeader("AccountCode", "Account Code")
+        SetColumnHeader("AccountName", "Account Name")
+        SetColumnHeader("AccountType", "Account Type")
+        SetColumnHeader("DebitBalance", "Debit Balance")
+        SetColumnHeader("CreditBalance", "Credit Balance")
+
+        FormatMoneyColumn("DebitBalance")
+        FormatMoneyColumn("CreditBalance")
+
+        If reportGrid.Columns.Contains("AccountId") Then
+            reportGrid.Columns("AccountId").Visible = False
+        End If
+
+        UpdateResultCount()
+
+        If displayedRows.Count = 0 AndAlso allRows.Count > 0 Then
+            statusLabel.Text = "No accounts match your search."
+        ElseIf allRows.Count = 0 Then
+            statusLabel.Text = "No trial balance accounts are available."
+        End If
+    End Sub
+
+    Private Sub UpdateResultCount()
+        resultCountLabel.Text =
+            $"{displayedRows.Count} of {allRows.Count} accounts"
+    End Sub
+
+    Private Function ContainsText(
+        value As String,
+        query As String) As Boolean
+
+        Return Not String.IsNullOrEmpty(value) AndAlso
+            value.IndexOf(
+                query,
+                StringComparison.OrdinalIgnoreCase) >= 0
+    End Function
+
     Private Sub SetColumnHeader(
         columnName As String,
-        header As String
-    )
+        header As String)
+
         If reportGrid.Columns.Contains(columnName) Then
             reportGrid.Columns(columnName).HeaderText = header
         End If
@@ -270,6 +413,15 @@ Public Class TrialBalanceForm
         Public Property Debits As String
         Public Property Credits As String
         Public Property IsBalanced As Boolean
+    End Class
+
+    Private Class TrialBalanceRow
+        Public Property AccountId As Integer
+        Public Property AccountCode As String
+        Public Property AccountName As String
+        Public Property AccountType As String
+        Public Property DebitBalance As Decimal
+        Public Property CreditBalance As Decimal
     End Class
 
 End Class

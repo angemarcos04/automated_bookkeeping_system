@@ -9,13 +9,28 @@ use Illuminate\Http\Request;
 
 class FixedAssetController extends Controller
 {
-    public function index(): JsonResponse
-    {
-        return response()->json([
-            'success' => true,
-            'data' => FixedAsset::orderBy('name')->get(),
-        ]);
+
+public function index(Request $request): JsonResponse
+{
+    $query = FixedAsset::query();
+
+    $search = trim((string) $request->query('search', ''));
+
+    if ($search !== '') {
+        $query->where(function ($builder) use ($search) {
+            $builder->where('asset_code', 'like', '%' . $search . '%')
+                ->orWhere('name', 'like', '%' . $search . '%')
+                ->orWhere('category', 'like', '%' . $search . '%')
+                ->orWhere('location', 'like', '%' . $search . '%');
+        });
     }
+
+    return response()->json([
+        'success' => true,
+        'data' => $query->orderBy('name')->get(),
+    ]);
+}
+
 
     public function store(Request $request): JsonResponse
     {

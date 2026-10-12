@@ -9,18 +9,38 @@ use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $query = Customer::query();
+
+        // Search customer records.
+        $search = trim((string) $request->query('search', ''));
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('customer_code', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('contact_number', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('address', 'like', "%{$search}%");
+            });
+        }
+
         return response()->json([
             'success' => true,
-            'data' => Customer::orderBy('name')->get(),
+            'data' => $query->orderBy('name')->get(),
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'customer_code' => ['required', 'string', 'max:20', 'unique:customers,customer_code'],
+            'customer_code' => [
+                'required',
+                'string',
+                'max:20',
+                'unique:customers,customer_code',
+            ],
             'name' => ['required', 'string', 'max:150'],
             'contact_number' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
@@ -44,8 +64,10 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function update(Request $request, Customer $customer): JsonResponse
-    {
+    public function update(
+        Request $request,
+        Customer $customer
+    ): JsonResponse {
         $validated = $request->validate([
             'customer_code' => [
                 'required',
