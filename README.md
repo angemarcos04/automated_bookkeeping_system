@@ -9,6 +9,10 @@ The desktop runs on Windows. The API can run on Windows or Gentoo Linux. The des
 - `WaterRefilling.App/` — existing Windows desktop application.
 - `water-refilling-api/` — Laravel API, database migrations, seeders, and tests.
 
+## Windows download
+
+Get the current desktop executable and complete Windows package from [Releases](https://github.com/angemarcos04/automated_bookkeeping_system/releases/latest). The standalone `WaterRefilling.App.exe` runs on Windows x64. The `AquaARC-win-x64.zip` package contains the desktop executable and its supporting files; extract the ZIP before running it. The desktop needs a running Laravel API; follow [Local setup](LOCAL_SETUP.md) to configure it.
+
 ## Start here
 
 - [Dependencies](DEPENDENCIES.md)

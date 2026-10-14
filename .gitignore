@@ -15,6 +15,7 @@
 
 # VB.NET build output
 **/bin/
+!/WaterRefilling.App/bin/
 **/obj/
 **/.vs/
 **/*.user
