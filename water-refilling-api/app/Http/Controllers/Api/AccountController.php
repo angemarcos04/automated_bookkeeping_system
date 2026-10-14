@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\DB;
 
 class AccountController extends Controller
 {
@@ -122,7 +124,15 @@ class AccountController extends Controller
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        $account->update($validated);
+        DB::transaction(function () use ($account, $validated) {
+            $locked = Account::whereKey($account->id)->lockForUpdate()->firstOrFail();
+            if (isset($validated['account_type']) &&
+                $validated['account_type'] !== $locked->account_type &&
+                $locked->journalEntryLines()->whereHas('journalEntry', fn ($query) => $query->where('status', 'Posted'))->exists()) {
+                throw ValidationException::withMessages(['account_type' => 'An account with posted journal history cannot change accounting type.']);
+            }
+            $locked->update($validated);
+        });
 
         return response()->json([
             'success' => true,

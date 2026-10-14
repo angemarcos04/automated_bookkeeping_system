@@ -44,7 +44,7 @@ class CashReceiptController extends Controller
                 'integer',
                 'exists:accounts,id',
             ],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01'],
             'bank_deposited' => ['nullable', 'string', 'max:150'],
             'remarks' => ['nullable', 'string'],
         ]);
@@ -97,12 +97,7 @@ class CashReceiptController extends Controller
                 'created_by' => $request->user()?->id,
             ]);
 
-            $amount = number_format(
-                (float) $validated['amount'],
-                2,
-                '.',
-                ''
-            );
+            $amount = bcadd((string) $validated['amount'], '0', 2);
 
             $entry->lines()->createMany([
                 [
@@ -152,22 +147,22 @@ class CashReceiptController extends Controller
                 ]);
             }
 
-            $entry = JournalEntry::where(
+            $entries = JournalEntry::where(
                 'reference_type',
                 'CashReceipt'
             )
                 ->where('reference_id', $receipt->id)
                 ->lockForUpdate()
-                ->first();
+                ->get();
 
-            if (! $entry) {
+            if ($entries->count() !== 1 || $entries->first()->status !== 'Draft') {
                 throw ValidationException::withMessages([
                     'journal_entry' =>
-                        'No journal entry exists for this receipt.',
+                        'This receipt requires exactly one Draft journal entry.',
                 ]);
             }
 
-            $journalEntryService->post($entry);
+            $journalEntryService->post($entries->first());
 
             $receipt->status = 'Posted';
             $receipt->save();
@@ -219,12 +214,16 @@ class CashReceiptController extends Controller
                 'integer',
                 'exists:accounts,id',
             ],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01'],
             'bank_deposited' => ['nullable', 'string', 'max:150'],
             'remarks' => ['nullable', 'string'],
         ]);
 
         DB::transaction(function () use ($validated, $cashReceipt) {
+            $cashReceipt = CashReceipt::whereKey($cashReceipt->id)->lockForUpdate()->firstOrFail();
+            if ($cashReceipt->status !== 'Draft') {
+                throw ValidationException::withMessages(['status' => 'Only Draft receipts can be edited.']);
+            }
             $depositAccount = Account::findOrFail(
                 $validated['deposit_account_id']
             );
@@ -242,15 +241,18 @@ class CashReceiptController extends Controller
                 ]);
             }
 
-            $cashReceipt->update($validated);
-
-            $entry = JournalEntry::where(
+            $entries = JournalEntry::where(
                 'reference_type',
                 'CashReceipt'
             )
                 ->where('reference_id', $cashReceipt->id)
-                ->where('status', 'Draft')
-                ->firstOrFail();
+                ->lockForUpdate()->get();
+            if ($entries->count() !== 1 || $entries->first()->status !== 'Draft') {
+                throw ValidationException::withMessages(['journal_entry' => 'This receipt requires exactly one Draft journal entry.']);
+            }
+            $entry = $entries->first();
+
+            $cashReceipt->update($validated);
 
             $entry->update([
                 'journal_date' => $validated['receipt_date'],
@@ -260,12 +262,7 @@ class CashReceiptController extends Controller
                     . $validated['payor'],
             ]);
 
-            $amount = number_format(
-                (float) $validated['amount'],
-                2,
-                '.',
-                ''
-            );
+            $amount = bcadd((string) $validated['amount'], '0', 2);
 
             $lines = $entry->lines()->orderBy('id')->get();
 
@@ -312,24 +309,25 @@ class CashReceiptController extends Controller
         }
 
         DB::transaction(function () use ($cashReceipt) {
-            $entry = JournalEntry::where(
+            $cashReceipt = CashReceipt::whereKey($cashReceipt->id)->lockForUpdate()->firstOrFail();
+            if ($cashReceipt->status !== 'Draft') {
+                throw ValidationException::withMessages(['status' => 'Only Draft receipts can be deleted.']);
+            }
+            $entries = JournalEntry::where(
                 'reference_type',
                 'CashReceipt'
             )
                 ->where('reference_id', $cashReceipt->id)
-                ->first();
-
-            if ($entry && $entry->status !== 'Draft') {
+                ->lockForUpdate()->get();
+            if ($entries->count() !== 1 || $entries->first()->status !== 'Draft') {
                 throw ValidationException::withMessages([
                     'journal_entry' =>
-                        'A posted journal entry cannot be deleted.',
+                        'This receipt requires exactly one Draft journal entry.',
                 ]);
             }
-
-            if ($entry) {
-                $entry->lines()->delete();
-                $entry->delete();
-            }
+            $entry = $entries->first();
+            $entry->lines()->delete();
+            $entry->delete();
 
             $cashReceipt->delete();
         });

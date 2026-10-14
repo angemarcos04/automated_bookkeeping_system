@@ -464,6 +464,10 @@ Public Class CashDisbursementsForm
                            Nothing, remarksInput.Text.Trim())}
         }
 
+        payload("post_now") = ApiSession.HasServerPermissions AndAlso
+            ApiSession.CurrentUserPermissions.Contains("cash_disbursements.approve") AndAlso
+            ApiSession.CurrentUserPermissions.Contains("cash_disbursements.post")
+
         Try
             saveButton.Enabled = False
             SetStatus("Saving disbursement...")

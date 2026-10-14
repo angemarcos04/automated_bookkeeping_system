@@ -14,6 +14,22 @@ class RfpWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_rfp_can_be_created_as_a_server_owned_draft(): void
+    {
+        $user = $this->userWithPermissions(['rfp.create']);
+        $this->authenticatedAs($user)->postJson('/api/rfps', [
+            'rfp_number' => 'RFP-DRAFT-CREATE',
+            'rfp_date' => '2026-10-10',
+            'requested_by' => 'Requester',
+            'payee' => 'Payee',
+            'purpose' => 'Supplies',
+            'amount' => '1000.00',
+        ])->assertCreated()
+            ->assertJsonPath('data.status', 'Draft')
+            ->assertJsonPath('data.user_id', $user->id)
+            ->assertJsonPath('data.prepared_by', $user->name);
+    }
+
     public function test_rfp_creation_cannot_set_workflow_status_or_actor_metadata(): void
     {
         $user = $this->userWithPermissions(['rfp.create']);

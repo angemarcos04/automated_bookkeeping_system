@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\JournalEntry;
+use App\Models\Account;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -10,9 +11,9 @@ class JournalEntryService
 {
     public function validateForPosting(JournalEntry $entry): void
     {
-    if (! $entry->relationLoaded('lines')) {
-    $entry->load('lines');
-}
+        if (! $entry->relationLoaded('lines')) {
+            $entry->load('lines.account');
+        }
 
         if ($entry->lines->count() < 2) {
             throw ValidationException::withMessages([
@@ -20,33 +21,32 @@ class JournalEntryService
             ]);
         }
 
+        $totalDebits = '0.00';
+        $totalCredits = '0.00';
         foreach ($entry->lines as $line) {
-            $debit = (float) $line->debit_amount;
-            $credit = (float) $line->credit_amount;
+            $debit = (string) $line->debit_amount;
+            $credit = (string) $line->credit_amount;
 
-            if ($debit < 0 || $credit < 0) {
+            if (bccomp($debit, '0', 2) < 0 || bccomp($credit, '0', 2) < 0) {
                 throw ValidationException::withMessages([
                     'lines' => 'Debit and credit amounts cannot be negative.',
                 ]);
             }
 
-            if (($debit > 0 && $credit > 0) ||
-                ($debit == 0 && $credit == 0)) {
+            if ((bccomp($debit, '0', 2) > 0 && bccomp($credit, '0', 2) > 0) ||
+                (bccomp($debit, '0', 2) === 0 && bccomp($credit, '0', 2) === 0)) {
                 throw ValidationException::withMessages([
                     'lines' => 'Each line must contain either a debit or a credit, not both or neither.',
                 ]);
             }
+            if (! $line->account?->is_active) {
+                throw ValidationException::withMessages(['lines' => 'Posting requires active accounts.']);
+            }
+            $totalDebits = bcadd($totalDebits, $debit, 2);
+            $totalCredits = bcadd($totalCredits, $credit, 2);
         }
 
-        $totalDebits = $entry->lines->sum(
-            fn ($line) => (float) $line->debit_amount
-        );
-
-        $totalCredits = $entry->lines->sum(
-            fn ($line) => (float) $line->credit_amount
-        );
-
-        if (round($totalDebits, 2) !== round($totalCredits, 2)) {
+        if (bccomp($totalDebits, $totalCredits, 2) !== 0) {
             throw ValidationException::withMessages([
                 'lines' => 'Total debits must equal total credits before posting.',
             ]);
@@ -65,6 +65,9 @@ class JournalEntryService
                     'status' => 'Only draft journal entries can be posted.',
                 ]);
             }
+
+            $accountIds = $lockedEntry->lines()->pluck('account_id')->unique()->sort()->values();
+            Account::whereIn('id', $accountIds)->orderBy('id')->lockForUpdate()->get();
 
             $this->validateForPosting($lockedEntry);
 

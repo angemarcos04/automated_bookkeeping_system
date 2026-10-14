@@ -5,7 +5,9 @@
 
 # PHP dependencies and generated files
 **/vendor/
+**/vendor.root-owned-backup/
 **/storage/*.key
+**/storage/framework/*.pid
 
 # SQLite database files
 **/database/*.sqlite

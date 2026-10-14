@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FixedAsset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class FixedAssetController extends Controller
 {
@@ -44,14 +45,15 @@ public function index(Request $request): JsonResponse
             'name' => ['required', 'string', 'max:150'],
             'category' => ['nullable', 'string', 'max:100'],
             'acquisition_date' => ['nullable', 'date'],
-            'acquisition_cost' => ['required', 'numeric', 'min:0'],
-            'useful_life_years' => ['nullable', 'numeric', 'min:0'],
-            'salvage_value' => ['required', 'numeric', 'min:0'],
+            'acquisition_cost' => ['required', 'numeric', 'decimal:0,2', 'min:0'],
+            'useful_life_years' => ['nullable', 'numeric', 'gt:0'],
+            'salvage_value' => ['required', 'numeric', 'decimal:0,2', 'min:0'],
             'location' => ['nullable', 'string', 'max:150'],
             'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
             'description' => ['nullable', 'string'],
         ]);
 
+        $this->validateDepreciationBase($validated);
         $fixedAsset = FixedAsset::create($validated);
 
         return response()->json([
@@ -83,15 +85,16 @@ public function index(Request $request): JsonResponse
             'name' => ['required', 'string', 'max:150'],
             'category' => ['nullable', 'string', 'max:100'],
             'acquisition_date' => ['nullable', 'date'],
-            'acquisition_cost' => ['required', 'numeric', 'min:0'],
-            'useful_life_years' => ['nullable', 'numeric', 'min:0'],
-            'salvage_value' => ['required', 'numeric', 'min:0'],
+            'acquisition_cost' => ['required', 'numeric', 'decimal:0,2', 'min:0'],
+            'useful_life_years' => ['nullable', 'numeric', 'gt:0'],
+            'salvage_value' => ['required', 'numeric', 'decimal:0,2', 'min:0'],
             'location' => ['nullable', 'string', 'max:150'],
             'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
             'description' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
+        $this->validateDepreciationBase($validated);
         $fixedAsset->update($validated);
 
         return response()->json([
@@ -118,5 +121,12 @@ public function index(Request $request): JsonResponse
             'success' => true,
             'message' => 'Fixed asset deactivated successfully.',
         ]);
+    }
+
+    private function validateDepreciationBase(array $validated): void
+    {
+        if (bccomp((string) $validated['salvage_value'], (string) $validated['acquisition_cost'], 2) > 0) {
+            throw ValidationException::withMessages(['salvage_value' => 'Salvage value cannot exceed acquisition cost.']);
+        }
     }
 }

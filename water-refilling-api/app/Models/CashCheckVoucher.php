@@ -21,6 +21,7 @@ class CashCheckVoucher extends Model
         'status',
         'remarks',
         'prepared_by',
+        'prepared_by_user_id',
         'prepared_date',
         'approved_by',
         'approved_date',

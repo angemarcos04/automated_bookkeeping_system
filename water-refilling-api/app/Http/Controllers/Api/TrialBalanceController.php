@@ -11,8 +11,12 @@ class TrialBalanceController extends Controller
 {
     public function index(): JsonResponse
     {
+        $validated = request()->validate(['as_of' => ['nullable', 'date_format:Y-m-d']]);
         $accounts = Account::query()
-            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('is_active', true)
+                    ->orWhereHas('journalEntryLines', fn ($lines) => $lines->whereHas('journalEntry', fn ($entries) => $entries->where('status', 'Posted')));
+            })
             ->orderBy('account_code')
             ->get();
 
@@ -24,6 +28,7 @@ class TrialBalanceController extends Controller
                 'lines.journal_entry_id'
             )
             ->where('entries.status', 'Posted')
+            ->when(isset($validated['as_of']), fn ($query) => $query->whereDate('entries.journal_date', '<=', $validated['as_of']))
             ->select(
                 'lines.account_id',
                 DB::raw('SUM(lines.debit_amount) as total_debits'),
@@ -33,46 +38,36 @@ class TrialBalanceController extends Controller
             ->get()
             ->keyBy('account_id');
 
-        $totalDebits = 0.0;
-        $totalCredits = 0.0;
+        $totalDebits = '0.00';
+        $totalCredits = '0.00';
         $rows = [];
 
         foreach ($accounts as $account) {
             $balance = $balances->get($account->id);
 
-            $debits = (float) ($balance->total_debits ?? 0);
-            $credits = (float) ($balance->total_credits ?? 0);
+            $debits = (string) ($balance->total_debits ?? '0.00');
+            $credits = (string) ($balance->total_credits ?? '0.00');
 
-            $netBalance = $debits - $credits;
+            $netBalance = bcsub($debits, $credits, 2);
 
-            if ($netBalance >= 0) {
+            if (bccomp($netBalance, '0', 2) >= 0) {
                 $debitBalance = $netBalance;
-                $creditBalance = 0;
+                $creditBalance = '0.00';
             } else {
-                $debitBalance = 0;
-                $creditBalance = abs($netBalance);
+                $debitBalance = '0.00';
+                $creditBalance = bcsub('0', $netBalance, 2);
             }
 
-            $totalDebits += $debitBalance;
-            $totalCredits += $creditBalance;
+            $totalDebits = bcadd($totalDebits, $debitBalance, 2);
+            $totalCredits = bcadd($totalCredits, $creditBalance, 2);
 
             $rows[] = [
                 'account_id' => $account->id,
                 'account_code' => $account->account_code,
                 'account_name' => $account->account_name,
                 'account_type' => $account->account_type,
-                'debit_balance' => number_format(
-                    $debitBalance,
-                    2,
-                    '.',
-                    ''
-                ),
-                'credit_balance' => number_format(
-                    $creditBalance,
-                    2,
-                    '.',
-                    ''
-                ),
+                'debit_balance' => $debitBalance,
+                'credit_balance' => $creditBalance,
             ];
         }
 
@@ -80,11 +75,9 @@ class TrialBalanceController extends Controller
             'success' => true,
             'data' => $rows,
             'totals' => [
-                'debits' => number_format($totalDebits, 2, '.', ''),
-                'credits' => number_format($totalCredits, 2, '.', ''),
-                'is_balanced' => abs(
-                    $totalDebits - $totalCredits
-                ) < 0.005,
+                'debits' => $totalDebits,
+                'credits' => $totalCredits,
+                'is_balanced' => bccomp($totalDebits, $totalCredits, 2) === 0,
             ],
         ]);
     }

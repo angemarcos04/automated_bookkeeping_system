@@ -184,8 +184,12 @@ Public Class JournalEntriesForm
         Try
             ApiSession.ApplyAuthorization()
 
-            Using response As HttpResponseMessage =
-                Await ApiSession.Client.GetAsync("journal-entries")
+            Dim entries As New List(Of JournalEntryItem)()
+            Dim pageNumber As Integer = 1
+            Dim lastPage As Integer = 1
+            Do
+                Using response As HttpResponseMessage =
+                    Await ApiSession.Client.GetAsync("journal-entries?page=" & pageNumber.ToString())
 
                 Dim body As String =
                     Await response.Content.ReadAsStringAsync()
@@ -205,8 +209,12 @@ Public Class JournalEntriesForm
                     JsonSerializer.Deserialize(Of JournalEntryPage)(
                         body, jsonOptions)
 
-                Dim entries As List(Of JournalEntryItem) =
-                    If(page?.Data, New List(Of JournalEntryItem)())
+                If page Is Nothing Then Throw New JsonException("Missing pagination data.")
+                entries.AddRange(If(page.Data, New List(Of JournalEntryItem)()))
+                lastPage = Math.Max(1, page.LastPage)
+                End Using
+                pageNumber += 1
+            Loop While pageNumber <= lastPage
 
                 Dim rows As New List(Of JournalEntryRow)
 
@@ -280,7 +288,6 @@ Public Class JournalEntriesForm
                     ' Explicitly load the first row's details.
                     Await LoadSelectedEntryLinesAsync(firstId)
                 End If
-            End Using
 
         Catch ex As JsonException
             statusLabel.Text =
@@ -639,6 +646,9 @@ Public Class JournalEntriesForm
     Private Class JournalEntryPage
         <JsonPropertyName("data")>
         Public Property Data As List(Of JournalEntryItem)
+
+        <JsonPropertyName("last_page")>
+        Public Property LastPage As Integer
     End Class
 
     Private Class JournalEntryItem

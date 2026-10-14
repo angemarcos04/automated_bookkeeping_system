@@ -51,6 +51,7 @@ class DashboardController extends Controller
         $balances = $balancesQuery
             ->select(
                 'accounts.id',
+                'accounts.account_code',
                 'accounts.account_name',
                 'accounts.account_type',
                 DB::raw('SUM(journal_entry_lines.debit_amount) as total_debits'),
@@ -58,45 +59,45 @@ class DashboardController extends Controller
             )
             ->groupBy(
                 'accounts.id',
+                'accounts.account_code',
                 'accounts.account_name',
                 'accounts.account_type'
             )
             ->get();
 
-        $cashBalance = 0;
-        $receivables = 0;
-        $payables = 0;
-        $assets = 0;
-        $liabilities = 0;
-        $equity = 0;
+        $cashBalance = '0.00';
+        $receivables = '0.00';
+        $payables = '0.00';
+        $assets = '0.00';
+        $liabilities = '0.00';
+        $equity = '0.00';
 
         foreach ($balances as $account) {
-            $netDebit =
-                (float) $account->total_debits
-                - (float) $account->total_credits;
+            $netDebit = bcsub((string) $account->total_debits, (string) $account->total_credits, 2);
 
-            $name = strtolower($account->account_name);
             $type = strtolower($account->account_type);
 
             if ($type === 'asset') {
-                $assets += $netDebit;
+                $assets = bcadd($assets, $netDebit, 2);
 
-                if (str_starts_with($name, 'cash')) {
-                    $cashBalance += $netDebit;
+                if (in_array($account->account_code, ['1000', '1010'], true)) {
+                    $cashBalance = bcadd($cashBalance, $netDebit, 2);
                 }
 
-                if (str_contains($name, 'accounts receivable')) {
-                    $receivables += $netDebit;
+                if ($account->account_code === '1100') {
+                    $receivables = bcadd($receivables, $netDebit, 2);
                 }
             }
 
             if ($type === 'liability') {
-                $liabilities -= $netDebit;
-                $payables -= $netDebit;
+                $liabilities = bcsub($liabilities, $netDebit, 2);
+                if ($account->account_code === '2000') {
+                    $payables = bcsub($payables, $netDebit, 2);
+                }
             }
 
             if ($type === 'equity') {
-                $equity -= $netDebit;
+                $equity = bcsub($equity, $netDebit, 2);
             }
         }
 
@@ -141,20 +142,20 @@ class DashboardController extends Controller
             ->groupBy('accounts.account_type')
             ->get();
 
-        $income = 0;
-        $expenses = 0;
+        $income = '0.00';
+        $expenses = '0.00';
 
         foreach ($periodTotals as $account) {
             $type = strtolower($account->account_type);
-            $debits = (float) $account->total_debits;
-            $credits = (float) $account->total_credits;
+            $debits = (string) $account->total_debits;
+            $credits = (string) $account->total_credits;
 
             if ($type === 'revenue') {
-                $income += $credits - $debits;
+                $income = bcadd($income, bcsub($credits, $debits, 2), 2);
             }
 
             if ($type === 'expense') {
-                $expenses += $debits - $credits;
+                $expenses = bcadd($expenses, bcsub($debits, $credits, 2), 2);
             }
         }
 
@@ -165,19 +166,20 @@ class DashboardController extends Controller
                 'end_date' => $endDate,
             ],
             'data' => [
-                'cash_balance' => round($cashBalance, 2),
-                'income' => round($income, 2),
-                'expenses' => round($expenses, 2),
-                'receivables' => round($receivables, 2),
-                'payables' => round($payables, 2),
-                'assets' => round($assets, 2),
+                'cash_balance' => (float) $cashBalance,
+                'income' => (float) $income,
+                'expenses' => (float) $expenses,
+                'receivables' => (float) $receivables,
+                'payables' => (float) $payables,
+                'liabilities' => (float) $liabilities,
+                'assets' => (float) $assets,
                 'financial_summary' => [
-                    'total_assets' => round($assets, 2),
-                    'total_liabilities' => round($liabilities, 2),
-                    'total_equity' => round($equity, 2),
-                    'total_income' => round($income, 2),
-                    'total_expenses' => round($expenses, 2),
-                    'net_income' => round($income - $expenses, 2),
+                    'total_assets' => (float) $assets,
+                    'total_liabilities' => (float) $liabilities,
+                    'total_equity' => (float) $equity,
+                    'total_income' => (float) $income,
+                    'total_expenses' => (float) $expenses,
+                    'net_income' => (float) bcsub($income, $expenses, 2),
                 ],
             ],
         ]);

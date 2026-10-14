@@ -17,6 +17,7 @@ class CashDisbursement extends Model
         'payment_method',
         'check_number',
         'remarks',
+        'status',
     ];
 
     protected $casts = [

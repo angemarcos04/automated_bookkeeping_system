@@ -1,6 +1,0 @@
-C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\bin\Release\net10.0-windows\win-x64\publish\WaterRefilling.App.exe
-C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\bin\Release\net10.0-windows\win-x64\publish\AquaARC.ico
-C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\bin\Release\net10.0-windows\win-x64\publish\WaterRefilling.App.dll
-C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\bin\Release\net10.0-windows\win-x64\publish\WaterRefilling.App.deps.json
-C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\bin\Release\net10.0-windows\win-x64\publish\WaterRefilling.App.runtimeconfig.json
-C:\Program Files\Ampps\www\WaterRefillingSystem\WaterRefilling.App\bin\Release\net10.0-windows\win-x64\publish\WaterRefilling.App.pdb

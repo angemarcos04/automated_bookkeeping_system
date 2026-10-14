@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->call(AccountSeeder::class);
         /*
         |--------------------------------------------------------------------------
         | ROLES
@@ -310,7 +311,7 @@ class DatabaseSeeder extends Seeder
         */
 
         if ($admin) {
-            $admin->syncPermissions(Permission::all());
+            $admin->givePermissionTo(Permission::all());
         }
 
 
@@ -354,7 +355,7 @@ class DatabaseSeeder extends Seeder
 
         ])->get();
 
-        $ownerRole->syncPermissions($ownerPermissions);
+        $ownerRole->givePermissionTo($ownerPermissions);
 
 
         /*
@@ -427,6 +428,6 @@ class DatabaseSeeder extends Seeder
 
         ])->get();
 
-        $staffRole->syncPermissions($staffPermissions);
+        $staffRole->givePermissionTo($staffPermissions);
     }
 }

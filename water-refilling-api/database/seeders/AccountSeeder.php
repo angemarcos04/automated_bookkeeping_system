@@ -159,7 +159,7 @@ class AccountSeeder extends Seeder
         ];
 
         foreach ($accounts as $account) {
-            Account::updateOrCreate(
+            Account::firstOrCreate(
                 ['account_code' => $account['account_code']],
                 $account
             );

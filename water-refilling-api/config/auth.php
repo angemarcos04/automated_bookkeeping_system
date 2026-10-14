@@ -3,6 +3,7 @@
 use App\Models\User;
 
 return [
+    'allow_registration' => env('AQUA_ARC_ALLOW_REGISTRATION', false),
 
     /*
     |--------------------------------------------------------------------------

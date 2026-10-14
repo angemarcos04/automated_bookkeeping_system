@@ -1,9 +1,7 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
-use App\Models\User;
+use App\Http\Controllers\Api\AuthController;
 
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\CustomerController;
@@ -29,36 +27,7 @@ use App\Http\Controllers\Api\LapsingScheduleController;
 |--------------------------------------------------------------------------
 */
 
-Route::post('/login', function (Request $request) {
-    $request->validate([
-        'email' => ['required', 'email'],
-        'password' => ['required'],
-    ]);
-
-    $user = User::where('email', $request->email)->first();
-
-    if (! $user || ! Hash::check($request->password, $user->password)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Invalid email or password.',
-        ], 401);
-    }
-
-    $token = $user->createToken('vbnet-desktop')->plainTextToken;
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Login successful.',
-        'token' => $token,
-        'token_type' => 'Bearer',
-        'user' => [
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'roles' => $user->getRoleNames(),
-        ],
-    ]);
-});
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
 /*
 |--------------------------------------------------------------------------
@@ -67,6 +36,7 @@ Route::post('/login', function (Request $request) {
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+Route::post('/logout', [AuthController::class, 'logout']);
 
     /*
     |--------------------------------------------------------------------------
@@ -250,6 +220,9 @@ Route::get('/cash-disbursements', [CashDisbursementController::class, 'index'])
 Route::post('/cash-disbursements', [CashDisbursementController::class, 'store'])
     ->middleware('permission:cash_disbursements.create');
 
+Route::post('/cash-disbursements/{cashDisbursement}/post', [CashDisbursementController::class, 'post'])
+    ->middleware('permission:cash_disbursements.post');
+
 Route::get('/cash-disbursements/{cashDisbursement}', [CashDisbursementController::class, 'show'])
     ->middleware('permission:cash_disbursements.view');
 
@@ -271,6 +244,15 @@ Route::get('/rfps', [RfpController::class, 'index'])
 
 Route::post('/rfps', [RfpController::class, 'store'])
     ->middleware('permission:rfp.create');
+
+Route::post('/rfps/{rfp}/submit', [RfpController::class, 'submit'])
+    ->middleware('permission:rfp.submit');
+Route::post('/rfps/{rfp}/review', [RfpController::class, 'review'])
+    ->middleware('permission:approvals.review');
+Route::post('/rfps/{rfp}/approve', [RfpController::class, 'approve'])
+    ->middleware('permission:rfp.approve');
+Route::post('/rfps/{rfp}/reject', [RfpController::class, 'reject'])
+    ->middleware('permission:rfp.reject');
 
 Route::get('/rfps/{rfp}', [RfpController::class, 'show'])
     ->middleware('permission:rfp.view');
@@ -315,6 +297,13 @@ Route::get('/cash-check-vouchers', [CashCheckVoucherController::class, 'index'])
 
 Route::post('/cash-check-vouchers', [CashCheckVoucherController::class, 'store'])
     ->middleware('permission:vouchers.create');
+
+Route::post('/cash-check-vouchers/{cashCheckVoucher}/approve', [CashCheckVoucherController::class, 'approve'])
+    ->middleware('permission:vouchers.approve');
+Route::post('/cash-check-vouchers/{cashCheckVoucher}/release', [CashCheckVoucherController::class, 'release'])
+    ->middleware('permission:vouchers.post');
+Route::post('/cash-check-vouchers/{cashCheckVoucher}/pay', [CashCheckVoucherController::class, 'pay'])
+    ->middleware('permission:rfp.pay');
 
 Route::get('/cash-check-vouchers/{cashCheckVoucher}', [CashCheckVoucherController::class, 'show'])
     ->middleware('permission:vouchers.view');

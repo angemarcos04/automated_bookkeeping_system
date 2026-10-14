@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -35,7 +36,8 @@ class ApiAuthenticationTest extends TestCase
             'email' => $user->email,
             'password' => 'correct-password',
         ])->assertOk()
-            ->assertJsonStructure(['token', 'user' => ['id', 'email', 'roles']]);
+            ->assertJsonStructure(['token', 'token_type', 'user' => ['id', 'email', 'roles', 'permissions']])
+            ->assertJsonPath('token_type', 'Bearer');
 
         $token = $login->json('token');
         $this->assertNotEmpty($token);
@@ -76,5 +78,32 @@ class ApiAuthenticationTest extends TestCase
             ->assertOk();
 
         $this->assertCount(0, $user->tokens);
+        Auth::forgetGuards();
+        $this->withToken($token)->getJson('/api/accounts')->assertUnauthorized();
+    }
+
+    public function test_invalid_credentials_and_expired_tokens_are_rejected(): void
+    {
+        $user = User::create([
+            'name' => 'Login User',
+            'email' => 'login@example.test',
+            'password' => Hash::make('correct-password'),
+        ]);
+        $this->postJson('/api/login', ['email' => $user->email, 'password' => 'wrong'])
+            ->assertUnauthorized();
+        $this->postJson('/api/login', ['email' => 'invalid', 'password' => 'wrong'])
+            ->assertUnprocessable();
+        $token = $user->createToken('expired', ['*'], now()->subMinute())->plainTextToken;
+        $this->withToken($token)->getJson('/api/accounts')->assertUnauthorized();
+    }
+
+    public function test_login_is_rate_limited(): void
+    {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $this->postJson('/api/login', ['email' => 'missing@example.test', 'password' => 'wrong'])
+                ->assertUnauthorized();
+        }
+        $this->postJson('/api/login', ['email' => 'missing@example.test', 'password' => 'wrong'])
+            ->assertStatus(429);
     }
 }

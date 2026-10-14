@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
 {
@@ -31,16 +32,17 @@ class InvoiceController extends Controller
             'tax_identification_number' => ['nullable', 'string', 'max:255'],
             'prepared_by' => ['nullable', 'string', 'max:255'],
             'prepared_date' => ['nullable', 'date'],
-            'reviewed_by' => ['nullable', 'string', 'max:255'],
-            'reviewed_date' => ['nullable', 'date'],
-            'approved_by' => ['nullable', 'string', 'max:255'],
-            'approved_date' => ['nullable', 'date'],
+            'reviewed_by' => ['prohibited'],
+            'reviewed_date' => ['prohibited'],
+            'approved_by' => ['prohibited'],
+            'approved_date' => ['prohibited'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.nature_of_service' => ['required', 'string'],
-            'items.*.quantity' => ['required', 'numeric', 'gt:0'],
-            'items.*.unit_cost_price' => ['required', 'numeric', 'min:0'],
-            'items.*.amount' => ['required', 'numeric', 'min:0'],
+            'items.*.quantity' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+            'items.*.unit_cost_price' => ['required', 'numeric', 'decimal:0,2', 'min:0'],
+            'items.*.amount' => ['required', 'numeric', 'decimal:0,2', 'min:0'],
         ]);
+        $this->validateItems($validated['items']);
 
         $invoice = DB::transaction(function () use ($validated) {
             $invoice = Invoice::create([
@@ -88,16 +90,22 @@ class InvoiceController extends Controller
             'tax_identification_number' => ['sometimes', 'nullable', 'string', 'max:255'],
             'prepared_by' => ['sometimes', 'nullable', 'string', 'max:255'],
             'prepared_date' => ['sometimes', 'nullable', 'date'],
-            'reviewed_by' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'reviewed_date' => ['sometimes', 'nullable', 'date'],
-            'approved_by' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'approved_date' => ['sometimes', 'nullable', 'date'],
+            'reviewed_by' => ['prohibited'],
+            'reviewed_date' => ['prohibited'],
+            'approved_by' => ['prohibited'],
+            'approved_date' => ['prohibited'],
             'items' => ['sometimes', 'array', 'min:1'],
             'items.*.nature_of_service' => ['required_with:items', 'string'],
-            'items.*.quantity' => ['required_with:items', 'numeric', 'gt:0'],
-            'items.*.unit_cost_price' => ['required_with:items', 'numeric', 'min:0'],
-            'items.*.amount' => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.quantity' => ['required_with:items', 'numeric', 'decimal:0,2', 'gt:0'],
+            'items.*.unit_cost_price' => ['required_with:items', 'numeric', 'decimal:0,2', 'min:0'],
+            'items.*.amount' => ['required_with:items', 'numeric', 'decimal:0,2', 'min:0'],
         ]);
+        if ($invoice->approved_by !== null) {
+            throw ValidationException::withMessages(['invoice' => 'Approved invoices cannot be edited.']);
+        }
+        if (isset($validated['items'])) {
+            $this->validateItems($validated['items']);
+        }
 
         $invoice = DB::transaction(function () use ($validated, $invoice) {
             $invoice->update(collect($validated)->except('items')->all());
@@ -118,10 +126,23 @@ class InvoiceController extends Controller
 
     public function destroy(Invoice $invoice): JsonResponse
     {
+        if ($invoice->approved_by !== null) {
+            throw ValidationException::withMessages(['invoice' => 'Approved invoices cannot be deleted.']);
+        }
         $invoice->delete();
 
         return response()->json([
             'message' => 'Invoice deleted successfully.',
         ]);
+    }
+
+    private function validateItems(array $items): void
+    {
+        foreach ($items as $index => $item) {
+            $calculated = bcdiv(bcadd(bcmul((string) $item['quantity'], (string) $item['unit_cost_price'], 4), '0.005', 4), '1', 2);
+            if (bccomp($calculated, (string) $item['amount'], 2) !== 0) {
+                throw ValidationException::withMessages(["items.$index.amount" => 'Amount must equal quantity multiplied by unit cost, rounded to two decimals.']);
+            }
+        }
     }
 }

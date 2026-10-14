@@ -411,6 +411,35 @@ Public Sub New()
     End Function
 
     Private Function IsMenuAllowed(menuName As String) As Boolean
+        If ApiSession.HasServerPermissions Then
+            Dim permissions As List(Of String) = ApiSession.CurrentUserPermissions
+            Select Case menuName.Trim()
+                Case "Dashboard"
+                    Return permissions.Contains("dashboard.view")
+                Case "Master Data"
+                    Return permissions.Contains("accounts.view")
+                Case "Fixed Assets"
+                    Return permissions.Contains("fixed_assets.view")
+                Case "Transactions"
+                    Return permissions.Contains("cash_receipts.view") OrElse
+                        permissions.Contains("cash_disbursements.view")
+                Case "Cash Receipts Book"
+                    Return permissions.Contains("cash_receipts.view")
+                Case "Cash Disbursements"
+                    Return permissions.Contains("cash_disbursements.view")
+                Case "Journal Entries"
+                    Return permissions.Contains("journal.view")
+                Case "General Ledger"
+                    Return permissions.Contains("ledger.view")
+                Case "Financial Reports"
+                    Return permissions.Contains("financial_reports.view") OrElse
+                        permissions.Contains("trial_balance.view")
+                Case "Lapsing Schedule"
+                    Return permissions.Contains("financial_reports.view")
+                Case "Trial Balance"
+                    Return permissions.Contains("trial_balance.view")
+            End Select
+        End If
         If HasRole("Admin") Then Return True
 
         Select Case menuName.Trim()

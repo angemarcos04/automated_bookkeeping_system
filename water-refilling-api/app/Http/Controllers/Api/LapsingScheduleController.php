@@ -4,84 +4,74 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FixedAsset;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Carbon\Carbon;
+use Illuminate\Validation\Rule;
 
 class LapsingScheduleController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $request->validate([
-            'as_of' => ['sometimes', 'date'],
+        $validated = $request->validate([
+            'as_of' => ['sometimes', 'date_format:Y-m-d'],
+            'date' => ['sometimes', 'date_format:Y-m-d'],
+            'period' => ['sometimes', Rule::in(['daily', 'monthly'])],
         ]);
+        $asOf = Carbon::parse($validated['date'] ?? $validated['as_of'] ?? now()->toDateString())->startOfDay();
+        $period = $validated['period'] ?? 'daily';
+        $periodStart = $period === 'monthly' ? $asOf->copy()->startOfMonth() : $asOf->copy();
 
-        $asOf = Carbon::parse(
-            $request->query('as_of', now()->toDateString())
-        )->startOfDay();
-
-
-        $assets = FixedAsset::where('is_active', true)
-            ->where(function ($query) use ($asOf) {
-        $query->whereNull('acquisition_date')
-            ->orWhereDate(
-                'acquisition_date',
-                '<=',
-                $asOf->toDateString()
-            );
-    })
-    ->orderBy('asset_code')
-    ->get()
-
-
-            ->map(function (FixedAsset $asset) use ($asOf) {
-                $cost = (float) $asset->acquisition_cost;
-                $salvage = (float) $asset->salvage_value;
-                $life = (float) $asset->useful_life_years;
-
-                $yearsElapsed = 0;
-
-                if ($asset->acquisition_date) {
-                    $acquired = Carbon::parse(
-                        $asset->acquisition_date
-                    )->startOfDay();
-
-                    if ($asOf->greaterThanOrEqualTo($acquired)) {
-                        $yearsElapsed =
-                            $acquired->diffInDays($asOf) / 365.2425;
-                    }
+        $includeFuture = isset($validated['period']) || isset($validated['date']);
+        $assets = FixedAsset::query()
+            ->when(! $includeFuture, fn ($query) => $query->where(function ($query) use ($asOf) {
+                $query->whereNull('acquisition_date')->orWhereDate('acquisition_date', '<=', $asOf->toDateString());
+            }))
+            ->orderBy('asset_code')->get()
+            ->map(function (FixedAsset $asset) use ($asOf, $periodStart) {
+                $cost = (string) $asset->acquisition_cost;
+                $salvage = (string) $asset->salvage_value;
+                $life = (string) ($asset->useful_life_years ?? '0');
+                $acquired = $asset->acquisition_date
+                    ? Carbon::parse($asset->acquisition_date)->startOfDay() : null;
+                $notYetAcquired = $acquired === null || $acquired->greaterThan($asOf);
+                $base = bccomp($cost, $salvage, 2) > 0 ? bcsub($cost, $salvage, 2) : '0.00';
+                $eligible = ! $notYetAcquired && bccomp($life, '0', 2) > 0 && bccomp($base, '0', 2) > 0;
+                $annual = $eligible ? bcdiv($base, $life, 8) : '0.00';
+                $daily = $eligible ? bcdiv($annual, '365.2425', 8) : '0.00';
+                $elapsed = $eligible ? (int) $acquired->diffInDays($asOf) : 0;
+                $accumulatedRaw = bcmul($daily, (string) $elapsed, 8);
+                $accumulated = bccomp($accumulatedRaw, $base, 8) > 0 ? $base : $accumulatedRaw;
+                $firstDay = $acquired && $acquired->greaterThan($periodStart)
+                    ? $acquired : $periodStart;
+                $periodDays = $eligible && $firstDay->lessThanOrEqualTo($asOf)
+                    ? (int) $firstDay->diffInDays($asOf) + 1 : 0;
+                $beforeDays = $eligible && $acquired->lessThan($periodStart)
+                    ? (int) $acquired->diffInDays($periodStart) : 0;
+                $beforePeriodRaw = bcmul($daily, (string) $beforeDays, 8);
+                $beforePeriod = bccomp($beforePeriodRaw, $base, 8) > 0 ? $base : $beforePeriodRaw;
+                $remaining = bcsub($base, $beforePeriod, 8);
+                $periodRaw = bcmul($daily, (string) $periodDays, 8);
+                $periodDepreciation = bccomp($periodRaw, $remaining, 8) > 0 ? $remaining : $periodRaw;
+                $netBookValue = bcsub($cost, $accumulated, 8);
+                if (bccomp($netBookValue, $salvage, 8) < 0) {
+                    $netBookValue = $salvage;
                 }
-
-                $depreciableBase = max(0, $cost - $salvage);
-
-                $annualDepreciation = $life > 0
-                    ? $depreciableBase / $life
-                    : 0;
-
-                $accumulatedDepreciation = min(
-                    $depreciableBase,
-                    $annualDepreciation * $yearsElapsed
-                );
-
-                $netBookValue = max(
-                    $salvage,
-                    $cost - $accumulatedDepreciation
-                );
 
                 return [
                     'asset_code' => $asset->asset_code,
                     'name' => $asset->name,
                     'category' => $asset->category,
-                    'acquisition_date' =>
-                        $asset->acquisition_date?->toDateString(),
-                    'acquisition_cost' => round($cost, 2),
-                    'useful_life_years' => $life,
-                    'salvage_value' => round($salvage, 2),
-                    'annual_depreciation' =>
-                        round($annualDepreciation, 2),
-                    'accumulated_depreciation' =>
-                        round($accumulatedDepreciation, 2),
-                    'net_book_value' => round($netBookValue, 2),
+                    'acquisition_date' => $acquired?->toDateString(),
+                    'acquisition_cost' => (float) $this->money($cost),
+                    'useful_life_years' => (float) $life,
+                    'salvage_value' => (float) $this->money($salvage),
+                    'annual_depreciation' => (float) $this->money($annual),
+                    'accumulated_depreciation' => (float) $this->money($accumulated),
+                    'period_depreciation' => (float) $this->money($periodDepreciation),
+                    'net_book_value' => (float) $this->money($netBookValue),
+                    'not_yet_acquired' => $notYetAcquired,
+                    'eligible_for_depreciation' => $eligible,
                 ];
             });
 
@@ -90,5 +80,10 @@ class LapsingScheduleController extends Controller
             'as_of' => $asOf->toDateString(),
             'data' => $assets,
         ]);
+    }
+
+    private function money(string $value): string
+    {
+        return bcdiv(bcadd($value, '0.005', 8), '1', 2);
     }
 }

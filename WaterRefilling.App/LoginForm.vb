@@ -9,8 +9,8 @@ Imports System.Collections.Generic
 Public Class LoginForm
     Inherits Form
 
-    Private Const ApiUrl As String =
-        "http://127.0.0.1:8000/api/login"
+    Private ReadOnly ApiUrl As String =
+        New Uri(ApiSession.Client.BaseAddress, "login").ToString()
 
     Private ReadOnly emailInput As New TextBox()
     Private ReadOnly passwordInput As New TextBox()
@@ -163,6 +163,8 @@ Public Class LoginForm
             Dim parsedUserName As String = String.Empty
             Dim parsedUserEmail As String = String.Empty
             Dim parsedRoles As New List(Of String)()
+            Dim parsedPermissions As New List(Of String)()
+            Dim receivedPermissions As Boolean = False
 
             Using client As New HttpClient()
                 client.Timeout = TimeSpan.FromSeconds(15)
@@ -337,6 +339,17 @@ Public Class LoginForm
                                 Next
                             End If
 
+                            Dim permissionsElement As JsonElement
+                            If userElement.TryGetProperty("permissions", permissionsElement) AndAlso
+                                permissionsElement.ValueKind = JsonValueKind.Array Then
+                                receivedPermissions = True
+                                For Each permissionElement As JsonElement In permissionsElement.EnumerateArray()
+                                    If permissionElement.ValueKind = JsonValueKind.String Then
+                                        parsedPermissions.Add(permissionElement.GetString())
+                                    End If
+                                Next
+                            End If
+
                             If String.IsNullOrWhiteSpace(parsedUserName) OrElse
                                String.IsNullOrWhiteSpace(parsedUserEmail) Then
 
@@ -356,6 +369,8 @@ Public Class LoginForm
             ApiSession.CurrentUserName = parsedUserName
             ApiSession.CurrentUserEmail = parsedUserEmail
             ApiSession.CurrentUserRoles = parsedRoles
+            ApiSession.CurrentUserPermissions = parsedPermissions
+            ApiSession.HasServerPermissions = receivedPermissions
 
             ApiSession.ApplyAuthorization()
 
